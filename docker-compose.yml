@@ -80,6 +80,7 @@ services:
       - consul
     environment:
       - SPRING_PROFILES_ACTIVE=prod
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     restart: unless-stopped
 
   ai-service:
@@ -94,4 +95,5 @@ services:
       - consul
     environment:
       - SPRING_PROFILES_ACTIVE=prod
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     restart: unless-stopped
