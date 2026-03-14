@@ -2,10 +2,13 @@ package com.omninote_ai.server.entity;
 
 import java.util.UUID;
 
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 import org.springframework.stereotype.Indexed;
 
 import lombok.Getter;
 import lombok.Setter;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -34,7 +37,11 @@ public class User {
 
     private String status;
 
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
     private String createdAt;
 
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
     private String updatedAt;
 }
