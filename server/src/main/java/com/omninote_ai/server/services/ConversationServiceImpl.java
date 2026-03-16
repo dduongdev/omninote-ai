@@ -11,8 +11,10 @@ import com.omninote_ai.server.dto.ConversationCreateRequest;
 import com.omninote_ai.server.dto.ConversationCreateResponse;
 import com.omninote_ai.server.entity.Conversation;
 import com.omninote_ai.server.entity.Document;
+import com.omninote_ai.server.exception.CreateConversationException;
 import com.omninote_ai.server.exception.UploadFileException;
 import com.omninote_ai.server.mapper.ConversationMapper;
+import com.omninote_ai.server.outbox.exception.EnqueueOutboxEventException;
 import com.omninote_ai.server.repositories.ConversationRepository;
 
 import jakarta.transaction.Transactional;
@@ -26,6 +28,7 @@ public class ConversationServiceImpl implements ConversationService {
 
     private final ConversationRepository conversationRepository;
     private final MinioService minioService;
+    private final OutboxEventService outboxEventService;
 
     @Override
     @Transactional
@@ -49,7 +52,9 @@ public class ConversationServiceImpl implements ConversationService {
             }
             conversation.getDocuments().addAll(uploadedDocuments);
             conversation = conversationRepository.save(conversation);
-        } catch (UploadFileException e) {
+
+            outboxEventService.enqueueUploadedDocuments(uploadedDocuments);
+        } catch (UploadFileException | EnqueueOutboxEventException e) {
             for (Document doc : uploadedDocuments) {
                 try {
                     minioService.deleteFile(doc.getObjectName());
@@ -58,8 +63,8 @@ public class ConversationServiceImpl implements ConversationService {
                 }
             }
 
-            throw e;
-        }
+            throw new CreateConversationException("Failed to create conversation", e);
+        } 
 
         return conversation;
     }
