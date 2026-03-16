@@ -1,18 +1,27 @@
 package com.omninote_ai.server.controllers;
 
+import org.springframework.boot.webmvc.autoconfigure.WebMvcProperties.Problemdetails;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.PostMapping;
 
 import com.omninote_ai.server.dto.ConversationCreateRequest;
+import com.omninote_ai.server.dto.ConversationCreateResponse;
+import com.omninote_ai.server.services.ConversationService;
 
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Controller
+@RequiredArgsConstructor
 public class ConversationController {
+
+    private final ConversationService conversationService;
 
     @PostMapping("/api/v1/conversations/create")
     public ResponseEntity<?> createConversation(@Valid ConversationCreateRequest request) {
-        return ResponseEntity.ok("Conversation created successfully");        
+        ConversationCreateResponse response =conversationService.create(request);     
+        return ResponseEntity.ok(response);
     }
 }

@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Configuration
 public class RabbitMqConfig {
+    
     @SuppressWarnings("removal")
     @Bean
     public MessageConverter jsonMessageConverter(ObjectMapper objectMapper) {

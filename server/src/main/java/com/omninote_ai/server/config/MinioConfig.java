@@ -8,8 +8,8 @@ import io.minio.MinioClient;
 
 @Configuration
 public class MinioConfig {
-    @Value("${minio.endpoint}")
-    private String endpoint;
+    @Value("${minio.url}")
+    private String url;
 
     @Value("${minio.access-key}")
     private String accessKey;
@@ -20,7 +20,7 @@ public class MinioConfig {
     @Bean
     public MinioClient minioClient() {
         return MinioClient.builder()
-                .endpoint(endpoint)
+                .endpoint(url)
                 .credentials(accessKey, secretKey)
                 .build();
     }

@@ -40,8 +40,7 @@ public class OutboxEvent {
     @Column(name = "event_type", nullable = false)
     private String eventType;
 
-    @Embedded
-    private Object payload;
+    private String payload;
 
     @Builder.Default
     @Column(name = "is_published", nullable = false)

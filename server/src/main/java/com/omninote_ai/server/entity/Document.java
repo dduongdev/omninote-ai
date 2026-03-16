@@ -13,6 +13,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
@@ -46,7 +47,7 @@ public class Document {
     private DocumentStatus status = DocumentStatus.PROCESSING;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @Column(name = "conversation_id")
+    @JoinColumn(name = "conversation_id")
     private Conversation conversation;
 
     @CreationTimestamp
