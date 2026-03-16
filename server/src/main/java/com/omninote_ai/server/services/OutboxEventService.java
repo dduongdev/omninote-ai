@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.omninote_ai.server.entity.Document;
+import com.omninote_ai.server.event.DocumentUploadedEvent;
 import com.omninote_ai.server.outbox.entity.OutboxEvent;
 import com.omninote_ai.server.outbox.exception.EnqueueOutboxEventException;
 import com.omninote_ai.server.outbox.repository.OutboxEventRepository;
@@ -32,9 +33,14 @@ public class OutboxEventService {
         event.setAggregateId(uploadedDocument.getId());
         event.setAggregateType(Document.class.getSimpleName());
         event.setEventType("document.uploaded");
+        DocumentUploadedEvent payload = DocumentUploadedEvent.builder()
+            .documentId(uploadedDocument.getId())
+            .conversationId(uploadedDocument.getConversation().getId())
+            .objectName(uploadedDocument.getObjectName())
+            .build();
         try {
-            String payload = objectMapper.writeValueAsString(uploadedDocument);
-            event.setPayload(payload);
+            String payloadJson = objectMapper.writeValueAsString(payload);
+            event.setPayload(payloadJson);
         } catch (Exception e) {
             throw new EnqueueOutboxEventException("Failed to serialize document for outbox event", e);
         }

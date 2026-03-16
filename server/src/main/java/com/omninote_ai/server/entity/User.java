@@ -2,11 +2,9 @@ package com.omninote_ai.server.entity;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
-import org.springframework.stereotype.Indexed;
 
 import lombok.Getter;
 import lombok.Setter;

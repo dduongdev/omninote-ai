@@ -1,6 +1,7 @@
 package com.omninote_ai.server.dto;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import lombok.AllArgsConstructor;
@@ -19,5 +20,7 @@ public class ConversationCreateResponse {
     private String title;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private List<DocumentSummary> documents;
+    
+    @Builder.Default
+    private List<DocumentSummary> documents = new ArrayList<>();
 }

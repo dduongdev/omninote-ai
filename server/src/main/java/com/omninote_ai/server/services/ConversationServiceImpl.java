@@ -48,6 +48,7 @@ public class ConversationServiceImpl implements ConversationService {
                 String fileName = Paths.get(file.getOriginalFilename()).getFileName().toString();
                 document.setFileName(fileName);
                 document.setObjectName(objectName);
+                document.setConversation(conversation);
                 uploadedDocuments.add(document);
             }
             conversation.getDocuments().addAll(uploadedDocuments);
@@ -62,7 +63,6 @@ public class ConversationServiceImpl implements ConversationService {
                     log.error("Failed to delete file from MinIO: {}", doc.getObjectName(), ex);
                 }
             }
-            log.error(e.getMessage());
             throw new CreateConversationException("Failed to create conversation", e);
         }
 
