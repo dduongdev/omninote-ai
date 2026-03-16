@@ -62,9 +62,9 @@ public class ConversationServiceImpl implements ConversationService {
                     log.error("Failed to delete file from MinIO: {}", doc.getObjectName(), ex);
                 }
             }
-
+            log.error(e.getMessage());
             throw new CreateConversationException("Failed to create conversation", e);
-        } 
+        }
 
         return conversation;
     }

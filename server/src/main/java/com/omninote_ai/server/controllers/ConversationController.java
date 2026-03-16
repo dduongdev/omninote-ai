@@ -4,6 +4,7 @@ import org.springframework.boot.webmvc.autoconfigure.WebMvcProperties.Problemdet
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import com.omninote_ai.server.dto.ConversationCreateRequest;
 import com.omninote_ai.server.dto.ConversationCreateResponse;
@@ -13,7 +14,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-@Controller
+@RestController
 @RequiredArgsConstructor
 public class ConversationController {
 
@@ -21,7 +22,7 @@ public class ConversationController {
 
     @PostMapping("/api/v1/conversations/create")
     public ResponseEntity<?> createConversation(@Valid ConversationCreateRequest request) {
-        ConversationCreateResponse response =conversationService.create(request);     
+        ConversationCreateResponse response = conversationService.create(request);
         return ResponseEntity.ok(response);
     }
 }
