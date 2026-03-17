@@ -12,6 +12,7 @@ def connect_milvus():
         logger.info(f"Connected to Milvus at {MILVUS_HOST}:{MILVUS_PORT}")
     except Exception as e:
         logger.error(f"Failed to connect to Milvus: {e}")
+        raise
 
 def get_or_create_collection(collection_name: str) -> Collection:
     if not utility.has_collection(collection_name):
@@ -22,15 +23,15 @@ def get_or_create_collection(collection_name: str) -> Collection:
             FieldSchema(name="start_idx", dtype=DataType.INT64),
             FieldSchema(name="end_idx", dtype=DataType.INT64),
             FieldSchema(name="metadata", dtype=DataType.JSON),
-            FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=384)
+            FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=768)
         ]
         schema = CollectionSchema(fields, description="Documents chunk collection")
         collection = Collection(collection_name, schema)
         
         index_params = {
             "metric_type": "COSINE", 
-            "index_type": "IVF_FLAT", 
-            "params": {"nlist": 1024}
+            "index_type": "HNSW", 
+            "params": {"M": 8, "efConstruction": 64}
         }
         collection.create_index(field_name="vector", index_params=index_params)
         logger.info(f"Created Milvus collection and index: {collection_name}")
@@ -72,3 +73,12 @@ def insert_chunks(collection: Collection, partition_name: str, chunks: List[Chun
     collection.insert(entities, partition_name=partition_name)
     collection.flush()
     logger.info(f"Inserted {len(chunks)} chunks into Milvus partition {partition_name}")
+
+def delete_document_chunks(collection: Collection, partition_name: str, doc_id: str):
+    try:
+        expr = f"doc_id == '{doc_id}'"
+        collection.delete(expr=expr, partition_name=partition_name)
+        collection.flush()
+        logger.info(f"Deleted all chunks for doc_id {doc_id} in partition {partition_name}")
+    except Exception as e:
+        logger.error(f"Failed to delete chunks for doc_id {doc_id}: {e}")

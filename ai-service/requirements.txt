@@ -1,5 +1,6 @@
 # Vector Database & AI
-pymilvus==2.4.0
+pymilvus==2.4.4
+milvus-lite==2.4.4
 torch==2.3.1
 transformers==4.41.2
 huggingface_hub==0.23.2
@@ -25,3 +26,4 @@ pydantic==2.7.4
 pyvi==0.1.1
 paddlepaddle==2.6.2
 paddleocr==2.8.0
+PyMuPDF

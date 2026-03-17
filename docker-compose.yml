@@ -1,27 +1,6 @@
 version: '3.8'
 
 services:
-  etcd:
-    image: quay.io/coreos/etcd:v3.5.5
-    environment:
-      - ETCD_AUTO_COMPACTION_RETENTION_RENDER_BY_HOUR=1
-      - ALLOW_NONE_AUTHENTICATION=yes
-    command: etcd -advertise-client-urls http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379
-
-  milvus:
-    image: milvusdb/milvus:v2.4.0 
-    container_name: milvus
-    ports:
-      - "19530:19530"
-    environment:
-      - ETCD_ENDPOINTS=etcd:2379
-      - MINIO_ADDRESS=minio:9000
-      - MILVUS_HOST=milvus
-      - MILVUS_PORT=19530
-    command: ["milvus", "run", "standalone"]
-    depends_on:
-      - etcd
-
   rabbitmq:
     image: rabbitmq:3.12-management
     container_name: rabbitmq
@@ -144,7 +123,7 @@ services:
       - rabbitmq
       - consul
       - postgres
-      - milvus
+      - milvus-standalone
     environment:
       - INTERNAL_API_KEY=${INTERNAL_API_KEY}
       - RABBITMQ_HOST=rabbitmq
@@ -160,6 +139,42 @@ services:
       - CONSUL_HOST=consul
       - CONSUL_PORT=8500
       - POSTGRES_DB_URI=postgresql://postgres:postgres@postgres:5432/omninotedb
-      - MILVUS_HOST=milvus
+      - MILVUS_HOST=milvus-standalone
       - MILVUS_PORT=19530
-    restart: unless-stopped 
+      - HF_TOKEN=${HF_TOKEN}
+    restart: unless-stopped
+
+  etcd:
+    container_name: milvus-etcd
+    image: quay.io/coreos/etcd:v3.5.5
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - etcd-data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+
+  milvus-standalone:
+    container_name: milvus-standalone
+    image: milvusdb/milvus:v2.4.4
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET_NAME: "milvus-bucket"
+    volumes:
+      - milvus-data:/var/lib/milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    depends_on:
+      - "etcd"
+      - "minio"
+
+volumes:
+  etcd-data:
+  milvus-data: 

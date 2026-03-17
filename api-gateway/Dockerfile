@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
-FROM maven:3.9-eclipse-temurin-21-alpine AS build
+# Tránh dùng Alpine base build ở giai đoạn Maven (để giải quyết lỗi DNS repo.maven.apache.org)
+FROM maven:3.9.6-eclipse-temurin-21 AS build
 WORKDIR /app
 
 # Copy only pom.xml first to download dependencies
