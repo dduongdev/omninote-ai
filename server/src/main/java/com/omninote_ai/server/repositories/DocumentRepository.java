@@ -9,4 +9,5 @@ import java.util.List;
 public interface DocumentRepository extends JpaRepository<Document, Long> {
     List<Document> findAllByConversationId(Long conversationId);
     List<Document> findAllByIdInAndConversationId(List<Long> ids, Long conversationId);
+
 }

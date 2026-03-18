@@ -1,0 +1,29 @@
+# Vector Database & AI
+pymilvus==2.4.4
+milvus-lite==2.4.4
+torch==2.3.1
+transformers==4.41.2
+huggingface_hub==0.23.2
+sentence-transformers==3.0.1
+
+# Orchestration & Framework
+langchain==0.2.6
+langchain-community==0.2.6
+langchain-huggingface==0.0.3
+
+# Infrastructure & Integration
+minio==7.2.7
+pika==1.3.2
+python-consul==1.1.0
+python-dotenv==1.0.1
+
+# Database & Validation
+SQLAlchemy==2.0.31
+psycopg2-binary==2.9.9
+pydantic==2.7.4
+
+# NLP & OCR
+pyvi==0.1.1
+paddlepaddle==2.6.2
+paddleocr==2.8.0
+PyMuPDF

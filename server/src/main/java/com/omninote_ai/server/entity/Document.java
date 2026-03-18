@@ -41,6 +41,10 @@ public class Document {
     @Column(name = "object_name")
     private String objectName;
 
+
+    @Column(name = "extracted_object_name", nullable = true)
+    private String extractedObjectName;
+
     @Lob
     private String content;
 
