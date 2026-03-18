@@ -33,8 +33,12 @@ public class RabbitMqConfig {
     public static final String DOCUMENT_TOPIC_EXCHANGE = "document.topic.exchange";
     public static final String DOCUMENT_UPLOAD_QUEUE = "document.upload.queue";
     public static final String DOCUMENT_INGEST_QUEUE = "document.ingest.queue";
+    public static final String DOCUMENT_SOFT_DELETED_SUCCESS_QUEUE = "document.soft.deleted.success.queue";
+    public static final String DOCUMENT_SOFT_DELETED_FAILED_QUEUE = "document.soft.deleted.failed.queue";
     public static final String DOCUMENT_UPLOAD_ROUTING_KEY = "document.uploaded";
     public static final String DOCUMENT_INGEST_ROUTING_KEY = "document.ingest.#";
+    public static final String MILVUS_SOFT_DELETED_SUCCESS_ROUTING_KEY = "MILVUS_SOFT_DELETED_SUCCESS";
+    public static final String MILVUS_SOFT_DELETED_FAILED_ROUTING_KEY = "MILVUS_SOFT_DELETED_FAILED";
 
     @Bean
     public TopicExchange documentTopicExchange() {
@@ -52,6 +56,16 @@ public class RabbitMqConfig {
     }
 
     @Bean
+    public Queue documentSoftDeletedSuccessQueue() {
+        return QueueBuilder.durable(DOCUMENT_SOFT_DELETED_SUCCESS_QUEUE).build();
+    }
+
+    @Bean
+    public Queue documentSoftDeletedFailedQueue() {
+        return QueueBuilder.durable(DOCUMENT_SOFT_DELETED_FAILED_QUEUE).build();
+    }
+
+    @Bean
     public Binding bindingDocumentUploadQueue(Queue documentUploadQueue, TopicExchange documentTopicExchange) {
         return BindingBuilder.bind(documentUploadQueue).to(documentTopicExchange).with(DOCUMENT_UPLOAD_ROUTING_KEY);
     }
@@ -59,6 +73,16 @@ public class RabbitMqConfig {
     @Bean
     public Binding bindingDocumentIngestQueue(Queue documentIngestQueue, TopicExchange documentTopicExchange) {
         return BindingBuilder.bind(documentIngestQueue).to(documentTopicExchange).with(DOCUMENT_INGEST_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding bindingDocumentSoftDeletedSuccessQueue(Queue documentSoftDeletedSuccessQueue, TopicExchange documentTopicExchange) {
+        return BindingBuilder.bind(documentSoftDeletedSuccessQueue).to(documentTopicExchange).with(MILVUS_SOFT_DELETED_SUCCESS_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding bindingDocumentSoftDeletedFailedQueue(Queue documentSoftDeletedFailedQueue, TopicExchange documentTopicExchange) {
+        return BindingBuilder.bind(documentSoftDeletedFailedQueue).to(documentTopicExchange).with(MILVUS_SOFT_DELETED_FAILED_ROUTING_KEY);
     }
 
     //#endregion
