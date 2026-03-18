@@ -103,11 +103,11 @@ public class DocumentServiceImpl implements DocumentService {
             .orElseThrow(() -> new EntityNotFoundException("Document not found"));
         
         try {
+            documentRepository.delete(document);
             minioService.deleteFile(document.getObjectName());
             if (document.getExtractedObjectName() != null) {
                 minioService.deleteFile(document.getExtractedObjectName());
             }
-            documentRepository.delete(document);
             outboxEventService.enqueueFinalPurgeCommand(document);
         } catch (Exception e) {
             document.setStatus(DocumentStatus.READY);
