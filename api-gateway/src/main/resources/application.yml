@@ -38,7 +38,7 @@ spring:
         - id: server-route
           uri: lb://server
           predicates:
-            - Path=/api/auth/**,/api/users/**,/api/v1/conversations/**
+            - Path=/api/auth/**,/api/users/**,/api/*/conversations/**,/api/*/chat/**
 
         # --- AI Service ---
         - id: ai-service-route
