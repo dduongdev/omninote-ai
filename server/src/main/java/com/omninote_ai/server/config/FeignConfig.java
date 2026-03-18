@@ -10,13 +10,13 @@ import feign.RequestInterceptor;
 
 @Configuration
 public class FeignConfig {
-    @Value("$internal.api.key")
+    @Value("${internal.api.key}")
     private String internalApiKey;
 
     @Bean
     public RequestInterceptor requestInterceptor() {
         return requestTemplate -> {
-            requestTemplate.header("INTERNAL-API-KEY", internalApiKey);
+            requestTemplate.header("X-Internal-API-Key", internalApiKey);
         };
     }
 }
