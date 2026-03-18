@@ -20,7 +20,7 @@ def publish_outbox_events():
                 channel.exchange_declare(exchange=RABBITMQ_EXCHANGE, exchange_type='topic', durable=True)
                 channel.queue_declare(queue=RABBITMQ_INGEST_QUEUE, durable=True)
                 
-                for r_key in ["document.ingest.succeed", "document.ingest.failed"]:
+                for r_key in ["document.ingest.succeed", "document.ingest.failed", "MILVUS_SOFT_DELETED_SUCCESS", "MILVUS_SOFT_DELETED_FAILED"]:
                     channel.queue_bind(exchange=RABBITMQ_EXCHANGE, queue=RABBITMQ_INGEST_QUEUE, routing_key=r_key)
 
                 for event in events:

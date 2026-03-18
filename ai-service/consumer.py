@@ -29,9 +29,16 @@ def nack_message(ch, delivery_tag):
     else:
         logger.warning("Channel is closed, cannot nack message")
 
-def process_and_ack(ch, connection, delivery_tag, conversation_id, doc_id, object_name):
+def process_and_ack(ch, connection, delivery_tag, conversation_id, doc_id, object_name, action):
     try:
-        document_service.process_document(conversation_id, doc_id, object_name)
+        if action == "soft_delete":
+            document_service.soft_delete_document(conversation_id, doc_id)
+        elif action == "revert_soft_delete":
+            document_service.revert_soft_delete(conversation_id, doc_id)
+        elif action == "purge":
+            document_service.purge_document(conversation_id, doc_id)
+        else:
+            document_service.process_document(conversation_id, doc_id, object_name)
         connection.add_callback_threadsafe(lambda: ack_message(ch, delivery_tag))
     except Exception as e:
         logger.error(f"Error in background processing: {e}", exc_info=True)
@@ -46,12 +53,20 @@ def process_message(ch, method, properties, body):
         conversation_id = data.get("conversationId")
         doc_id = data.get("documentId")
         object_name = data.get("objectName")
+        routing_key = method.routing_key
+        action = data.get("action", "ingest")
+        if routing_key == "document.deleting":
+            action = "soft_delete"
+        elif routing_key == "MILVUS_REVERT_SOFT_DELETE":
+            action = "revert_soft_delete"
+        elif routing_key == "FINAL_PURGE_COMMAND":
+            action = "purge"
 
-        if not all([conversation_id, doc_id, object_name]):
+        if not conversation_id or not doc_id:
             raise ValueError("Missing required fields in payload")
             
         connection = ch.connection
-        executor.submit(process_and_ack, ch, connection, method.delivery_tag, conversation_id, doc_id, object_name)
+        executor.submit(process_and_ack, ch, connection, method.delivery_tag, conversation_id, doc_id, object_name, action)
 
     except Exception as e:
         logger.error(f"Error processing message: {e}", exc_info=True)
@@ -70,7 +85,9 @@ def main():
     
     channel.queue_declare(queue=RABBITMQ_QUEUE, durable=True)
     
-    channel.queue_bind(exchange=RABBITMQ_EXCHANGE, queue=RABBITMQ_QUEUE, routing_key=RABBITMQ_ROUTING_KEY)
+    # Bind multiple routing keys
+    for routing_key in [RABBITMQ_ROUTING_KEY, "document.deleting", "MILVUS_REVERT_SOFT_DELETE", "FINAL_PURGE_COMMAND"]:
+        channel.queue_bind(exchange=RABBITMQ_EXCHANGE, queue=RABBITMQ_QUEUE, routing_key=routing_key)
 
     channel.basic_consume(queue=RABBITMQ_QUEUE, on_message_callback=process_message)
 
