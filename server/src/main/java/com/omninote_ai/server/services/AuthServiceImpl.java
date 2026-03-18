@@ -49,7 +49,7 @@ public class AuthServiceImpl implements AuthService {
         if (optionalUser.isPresent()) {
             User user = optionalUser.get();
             if (passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-                String token = jwtUtil.generateToken(user.getUserName());
+                String token = jwtUtil.generateToken(user);
                 return new AuthResponse(token, "Login successful");
             }
         }
