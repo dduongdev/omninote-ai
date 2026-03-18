@@ -46,6 +46,7 @@ public class Document {
 
     @Enumerated(EnumType.STRING)
     @Builder.Default
+    @Column(columnDefinition = "varchar(20) default 'PROCESSING'", nullable = false)
     private DocumentStatus status = DocumentStatus.PROCESSING;
 
     @ManyToOne(fetch = FetchType.LAZY)

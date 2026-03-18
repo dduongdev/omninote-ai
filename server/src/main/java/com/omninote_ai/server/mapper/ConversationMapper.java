@@ -8,7 +8,9 @@ import com.omninote_ai.server.entity.Document;
 public class ConversationMapper {
     public static Conversation toEntity(ConversationCreateRequest request) {
         Conversation conversation = new Conversation();
-        conversation.setTitle(request.getTitle());
+        if (request.getTitle() != null && !request.getTitle().trim().isEmpty()) {
+            conversation.setTitle(request.getTitle());
+        }
 
         return conversation;
     }
