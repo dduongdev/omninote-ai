@@ -1,22 +1,15 @@
-package com.omninote_ai.server.entity;
+package com.omninote_ai.server.outbox.entity;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -25,27 +18,32 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "conversations")
+@Table(name = "outbox_events")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Conversation {
+public class OutboxEvent {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Builder.Default
-    private String title = "Untitled Conversation";
+    @Column(name = "aggregate_type", nullable = false)
+    private String aggregateType;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @Column(name = "aggregate_id", nullable = false)
+    private Long aggregateId;
 
-    @OneToMany(mappedBy = "conversation", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @Column(name = "event_type", nullable = false)
+    private String eventType;
+
+    private String payload;
+
     @Builder.Default
-    private List<Document> documents = new ArrayList<>();
+    @Column(name = "is_published", nullable = false)
+    private boolean isPublished = false;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

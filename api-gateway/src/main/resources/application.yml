@@ -1,0 +1,66 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  main:
+    web-application-type: reactive
+  
+  cloud:
+    consul:
+      host: ${CONSUL_HOST:localhost}
+      port: ${CONSUL_PORT:8500}
+      discovery:
+        prefer-ip-address: true
+        instance-id: ${spring.application.name}:${random.value}
+        health-check-interval: 10s
+        health-check-timeout: 5s
+        health-check-critical-timeout: 30s 
+        deregister: true
+
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+      
+      # 2. Cấu hình Routing (Chuyển hướng request)
+      routes:
+        # --- Auth and User Service (Server) ---
+        - id: server-route
+          uri: lb://server
+          predicates:
+            - Path=/api/auth/**,/api/users/**,/api/*/conversations/**,/api/*/chat/**
+
+        # --- AI Service ---
+        - id: ai-service-route
+          uri: lb://ai-service
+          predicates:
+            - Path=/api/ai/**
+
+  # 3. Cấu hình Security
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+
+  # 4. Cấu hình Multipart & Codecs
+  codec:
+    max-in-memory-size: 5MB
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
+
+# Log level để debug
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    org.springframework.security: INFO
