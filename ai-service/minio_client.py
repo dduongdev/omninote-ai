@@ -51,3 +51,11 @@ def check_exists(object_name: str) -> bool:
         if e.code == "NoSuchKey":
             return False
         raise
+
+def delete_object(object_name: str):
+    try:
+        minio_client.remove_object(MINIO_BUCKET, object_name)
+        logger.info(f"Deleted object from MinIO: {object_name}")
+    except S3Error as e:
+        logger.error(f"MinIO remove_object error for {object_name}: {e}")
+        pass
