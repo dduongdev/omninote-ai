@@ -43,8 +43,6 @@ public class Document {
     @Column(name = "extracted_object_name", nullable = true)
     private String extractedObjectName;
 
-    private String content;
-
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private DocumentStatus status = DocumentStatus.PROCESSING;

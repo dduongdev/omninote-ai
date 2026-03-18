@@ -1,7 +1,7 @@
 import json
 import logging
 import time
-from minio_client import get_object, upload_text, check_exists
+from minio_client import get_object, upload_text, check_exists, delete_object
 from extractor import ExtractorFactory
 from preprocessor import PhobertPreprocessingChain
 from chunking import ContentChunker
@@ -96,6 +96,8 @@ class DocumentProcessingService:
                     logger.error(f"All {max_retries} attempts failed. Saving document.ingest.failed event.")
 
                     delete_document_chunks(collection, partition_name, str(doc_id))
+                    delete_object(extracted_object_name)
+
                     
                     try:
                         failed_payload = {
