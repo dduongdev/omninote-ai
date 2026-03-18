@@ -14,6 +14,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
@@ -40,6 +41,7 @@ public class Document {
     @Column(name = "object_name")
     private String objectName;
 
+    @Lob
     private String content;
 
     @Enumerated(EnumType.STRING)

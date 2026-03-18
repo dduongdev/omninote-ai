@@ -16,7 +16,10 @@ import com.omninote_ai.server.exception.UploadFileException;
 import com.omninote_ai.server.mapper.ConversationMapper;
 import com.omninote_ai.server.outbox.exception.EnqueueOutboxEventException;
 import com.omninote_ai.server.repositories.ConversationRepository;
+import com.omninote_ai.server.repositories.UserRepository;
+import com.omninote_ai.server.utility.JwtUtil;
 
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,13 +30,21 @@ import lombok.extern.slf4j.Slf4j;
 public class ConversationServiceImpl implements ConversationService {
 
     private final ConversationRepository conversationRepository;
+    private final UserRepository userRepository;
     private final MinioService minioService;
     private final OutboxEventService outboxEventService;
+    private final JwtUtil jwtUtil;
 
     @Override
     @Transactional
     public ConversationCreateResponse create(ConversationCreateRequest request) {
+        Long currentUserId = jwtUtil.getCurrentUserId();
+        var user = userRepository.findById(currentUserId)
+            .orElseThrow(() -> new EntityNotFoundException("User not found"));
+
         Conversation conversation = ConversationMapper.toEntity(request);
+        conversation.setUser(user); // Associate the conversation with the user
+        
         conversation = uploadAndAttachDocuments(conversation, request.getFiles());
         return ConversationMapper.toCreateResponse(conversation);
     }
