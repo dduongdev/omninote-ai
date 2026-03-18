@@ -10,9 +10,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.omninote_ai.server.dto.ConversationCreateRequest;
 import com.omninote_ai.server.dto.ConversationCreateResponse;
+import com.omninote_ai.server.dto.DocumentDeleteRequest;
+import com.omninote_ai.server.dto.DocumentUploadRequest;
+import com.omninote_ai.server.dto.DocumentUploadResponse;
 import com.omninote_ai.server.repositories.ConversationRepository;
 import com.omninote_ai.server.repositories.UserRepository;
 import com.omninote_ai.server.services.ConversationService;
+import com.omninote_ai.server.services.DocumentService;
 import com.omninote_ai.server.utility.JwtUtil;
 import com.omninote_ai.server.entity.User;
 
@@ -27,6 +31,7 @@ public class ConversationController {
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
     private final ConversationRepository conversationRepository;
+    private final DocumentService documentService;
 
     @PostMapping("/api/v1/conversations/create")
     public ResponseEntity<?> createConversation(@Valid ConversationCreateRequest request) {
@@ -37,8 +42,7 @@ public class ConversationController {
     @GetMapping("/api/v1/conversations/{id}/exists")
     public ResponseEntity<java.util.Map<String, Boolean>> existsConversation(
             @PathVariable("id") Long id,
-            @RequestHeader(name = "Authorization", required = false) String authorization
-    ) {
+            @RequestHeader(name = "Authorization", required = false) String authorization) {
         if (authorization == null || !authorization.startsWith("Bearer ")) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(java.util.Map.of("exists", false));
         }
@@ -52,5 +56,20 @@ public class ConversationController {
 
         boolean exists = conversationRepository.existsByIdAndUserId(id, optionalUser.get().getId());
         return ResponseEntity.ok(java.util.Map.of("exists", exists));
+    }
+
+    @PostMapping("/api/v1/conversations/{conversationId}/documents/upload")
+    public ResponseEntity<DocumentUploadResponse> uploadDocuments(
+            @PathVariable("conversationId") Long conversationId,
+            @Valid DocumentUploadRequest request) {
+        DocumentUploadResponse response = documentService.uploadDocuments(conversationId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/api/v1/conversations/{conversationId}/documents/delete")
+    public ResponseEntity<?> deleteDocuments(
+            @PathVariable("conversationId") Long conversationId, DocumentDeleteRequest request) {
+        documentService.deleteDocuments(conversationId, request);
+        return ResponseEntity.ok().build();
     }
 }

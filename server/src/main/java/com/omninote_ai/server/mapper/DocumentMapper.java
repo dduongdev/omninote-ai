@@ -9,7 +9,6 @@ public class DocumentMapper {
                 .id(document.getId())
                 .fileName(document.getFileName())
                 .status(document.getStatus())
-                .content(document.getContent())
                 .createdAt(document.getCreatedAt())
                 .updatedAt(document.getUpdatedAt())
                 .build();

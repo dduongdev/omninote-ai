@@ -23,6 +23,7 @@ def get_or_create_collection(collection_name: str) -> Collection:
             FieldSchema(name="start_idx", dtype=DataType.INT64),
             FieldSchema(name="end_idx", dtype=DataType.INT64),
             FieldSchema(name="metadata", dtype=DataType.JSON),
+            FieldSchema(name="is_deleted", dtype=DataType.BOOL, default_value=False),
             FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=768)
         ]
         schema = CollectionSchema(fields, description="Documents chunk collection")
@@ -59,6 +60,7 @@ def insert_chunks(collection: Collection, partition_name: str, chunks: List[Chun
     start_idxs = [c.start_idx for c in chunks]
     end_idxs = [c.end_idx for c in chunks]
     metadatas = [c.metadata for c in chunks]
+    is_deleteds = [False for _ in chunks]
     vectors = [c.vector for c in chunks]
 
     entities = [
@@ -67,12 +69,127 @@ def insert_chunks(collection: Collection, partition_name: str, chunks: List[Chun
         start_idxs,
         end_idxs,
         metadatas,
+        is_deleteds,
         vectors
     ]
     
     collection.insert(entities, partition_name=partition_name)
     collection.flush()
     logger.info(f"Inserted {len(chunks)} chunks into Milvus partition {partition_name}")
+
+def soft_delete_document_chunks(collection: Collection, partition_name: str, doc_id: str):
+    try:
+        if not collection.has_partition(partition_name):
+            logger.warning(f"Partition {partition_name} does not exist.")
+            return
+
+        collection.load()
+        expr = f"doc_id == '{doc_id}'"
+        results = collection.query(
+            expr=expr,
+            partition_names=[partition_name],
+            output_fields=["chunk_id", "doc_id", "content", "start_idx", "end_idx", "metadata", "vector"]
+        )
+        
+        if not results:
+            logger.info(f"No chunks found for doc_id {doc_id} in {partition_name} to soft delete.")
+            return
+            
+        chunk_ids = []
+        doc_ids = []
+        contents = []
+        start_idxs = []
+        end_idxs = []
+        metadatas = []
+        is_deleteds = []
+        vectors = []
+        
+        for res in results:
+            chunk_ids.append(res["chunk_id"])
+            doc_ids.append(res["doc_id"])
+            contents.append(res["content"])
+            start_idxs.append(res["start_idx"])
+            end_idxs.append(res["end_idx"])
+            metadatas.append(res["metadata"])
+            is_deleteds.append(True)
+            vectors.append(res["vector"])
+            
+        entities = [
+            doc_ids,
+            contents,
+            start_idxs,
+            end_idxs,
+            metadatas,
+            is_deleteds,
+            vectors
+        ]
+        
+        # Delete old chunks
+        collection.delete(expr=f"chunk_id in {chunk_ids}", partition_name=partition_name)
+        # Insert new updated chunks
+        collection.insert(entities, partition_name=partition_name)
+        collection.flush()
+        logger.info(f"Soft deleted (delete+insert) {len(results)} chunks for doc_id {doc_id} in partition {partition_name}")
+    except Exception as e:
+        logger.error(f"Failed to soft delete chunks for doc_id {doc_id}: {e}")
+        raise e
+
+def revert_soft_delete_document_chunks(collection: Collection, partition_name: str, doc_id: str):
+    try:
+        if not collection.has_partition(partition_name):
+            logger.warning(f"Partition {partition_name} does not exist.")
+            return
+
+        collection.load()
+        expr = f"doc_id == '{doc_id}'"
+        results = collection.query(
+            expr=expr,
+            partition_names=[partition_name],
+            output_fields=["chunk_id", "doc_id", "content", "start_idx", "end_idx", "metadata", "vector"]
+        )
+        
+        if not results:
+            logger.info(f"No chunks found for doc_id {doc_id} in {partition_name} to revert soft delete.")
+            return
+            
+        chunk_ids = []
+        doc_ids = []
+        contents = []
+        start_idxs = []
+        end_idxs = []
+        metadatas = []
+        is_deleteds = []
+        vectors = []
+        
+        for res in results:
+            chunk_ids.append(res["chunk_id"])
+            doc_ids.append(res["doc_id"])
+            contents.append(res["content"])
+            start_idxs.append(res["start_idx"])
+            end_idxs.append(res["end_idx"])
+            metadatas.append(res["metadata"])
+            is_deleteds.append(False)
+            vectors.append(res["vector"])
+            
+        entities = [
+            doc_ids,
+            contents,
+            start_idxs,
+            end_idxs,
+            metadatas,
+            is_deleteds,
+            vectors
+        ]
+        
+        # Delete old chunks
+        collection.delete(expr=f"chunk_id in {chunk_ids}", partition_name=partition_name)
+        # Insert new updated chunks
+        collection.insert(entities, partition_name=partition_name)
+        collection.flush()
+        logger.info(f"Reverted soft delete (delete+insert) {len(results)} chunks for doc_id {doc_id} in partition {partition_name}")
+    except Exception as e:
+        logger.error(f"Failed to revert soft delete chunks for doc_id {doc_id}: {e}")
+        raise e
 
 def delete_document_chunks(collection: Collection, partition_name: str, doc_id: str):
     try:

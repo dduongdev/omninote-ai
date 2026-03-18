@@ -16,6 +16,7 @@ import com.omninote_ai.server.exception.UploadFileException;
 import com.omninote_ai.server.mapper.ConversationMapper;
 import com.omninote_ai.server.outbox.exception.EnqueueOutboxEventException;
 import com.omninote_ai.server.repositories.ConversationRepository;
+import com.omninote_ai.server.repositories.DocumentRepository;
 import com.omninote_ai.server.repositories.UserRepository;
 import com.omninote_ai.server.utility.JwtUtil;
 
@@ -34,22 +35,28 @@ public class ConversationServiceImpl implements ConversationService {
     private final MinioService minioService;
     private final OutboxEventService outboxEventService;
     private final JwtUtil jwtUtil;
+    private final DocumentRepository documentRepository;
 
     @Override
     @Transactional
     public ConversationCreateResponse create(ConversationCreateRequest request) {
-        Long currentUserId = jwtUtil.getCurrentUserId();
-        var user = userRepository.findById(currentUserId)
-            .orElseThrow(() -> new EntityNotFoundException("User not found"));
+        try {
+            Long currentUserId = jwtUtil.getCurrentUserId();
+            var user = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found"));
 
-        Conversation conversation = ConversationMapper.toEntity(request);
-        conversation.setUser(user); // Associate the conversation with the user
-        
-        conversation = uploadAndAttachDocuments(conversation, request.getFiles());
-        return ConversationMapper.toCreateResponse(conversation);
+            Conversation conversation = ConversationMapper.toEntity(request);
+            conversation.setUser(user); 
+            
+            uploadAndAttachDocuments(conversation, request.getFiles());
+            return ConversationMapper.toCreateResponse(conversation);
+        } catch (Exception e) {
+            log.error("Error creating conversation", e);
+            throw new CreateConversationException("Failed to create conversation", e);
+        }
     }
 
-    private Conversation uploadAndAttachDocuments(Conversation conversation, List<MultipartFile> files) {
+    public List<Document> uploadAndAttachDocuments(Conversation conversation, List<MultipartFile> files) {
         List<Document> uploadedDocuments = new ArrayList<>();
         try {
             for (MultipartFile file : files) {
@@ -63,6 +70,7 @@ public class ConversationServiceImpl implements ConversationService {
                 uploadedDocuments.add(document);
             }
             conversation.getDocuments().addAll(uploadedDocuments);
+            documentRepository.saveAll(uploadedDocuments);
             conversation = conversationRepository.save(conversation);
 
             outboxEventService.enqueueUploadedDocuments(uploadedDocuments);
@@ -74,9 +82,9 @@ public class ConversationServiceImpl implements ConversationService {
                     log.error("Failed to delete file from MinIO: {}", doc.getObjectName(), ex);
                 }
             }
-            throw new CreateConversationException("Failed to create conversation", e);
+            throw e;
         }
 
-        return conversation;
+        return uploadedDocuments;
     }
 }
