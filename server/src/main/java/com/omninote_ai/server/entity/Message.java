@@ -40,10 +40,10 @@ public class Message {
     @JoinColumn(name = "conversation_id", nullable = false)
     private Conversation conversation;
     
-    @Column(name = "content_query", nullable = false)
+    @Column(name = "content_query", nullable = false, columnDefinition = "TEXT")
     private String contentQuery;
 
-    @Column(name = "content_answer", nullable = false)
+    @Column(name = "content_answer", nullable = false, columnDefinition = "LONGTEXT")
     private String contentAnswer;
 
 
