@@ -31,12 +31,10 @@ def nack_message(ch, delivery_tag):
 
 def process_and_ack(ch, connection, delivery_tag, conversation_id, doc_id, object_name, action):
     try:
-        if action == "soft_delete":
-            document_service.soft_delete_document(conversation_id, doc_id)
-        elif action == "revert_soft_delete":
-            document_service.revert_soft_delete(conversation_id, doc_id)
-        elif action == "purge":
-            document_service.purge_document(conversation_id, doc_id)
+        if action == "drop_partition":
+            document_service.drop_partition(conversation_id)
+        elif action == "delete":
+            document_service.delete_document(conversation_id, doc_id)
         else:
             document_service.process_document(conversation_id, doc_id, object_name)
         connection.add_callback_threadsafe(lambda: ack_message(ch, delivery_tag))
@@ -55,15 +53,15 @@ def process_message(ch, method, properties, body):
         object_name = data.get("objectName")
         routing_key = method.routing_key
         action = data.get("action", "ingest")
-        if routing_key == "document.deleting":
-            action = "soft_delete"
-        elif routing_key == "MILVUS_REVERT_SOFT_DELETE":
-            action = "revert_soft_delete"
-        elif routing_key == "FINAL_PURGE_COMMAND":
-            action = "purge"
+        if routing_key == "DROP_PARTITION_COMMAND":
+            action = "drop_partition"
+        elif routing_key == "document.deleting":
+            action = "delete"
 
-        if not conversation_id or not doc_id:
-            raise ValueError("Missing required fields in payload")
+        if not conversation_id:
+            raise ValueError("Missing conversationId in payload")
+        if action != "drop_partition" and not doc_id:
+            raise ValueError("Missing documentId in payload")
             
         connection = ch.connection
         executor.submit(process_and_ack, ch, connection, method.delivery_tag, conversation_id, doc_id, object_name, action)
@@ -86,7 +84,7 @@ def main():
     channel.queue_declare(queue=RABBITMQ_QUEUE, durable=True)
     
     # Bind multiple routing keys
-    for routing_key in [RABBITMQ_ROUTING_KEY, "document.deleting", "MILVUS_REVERT_SOFT_DELETE", "FINAL_PURGE_COMMAND"]:
+    for routing_key in [RABBITMQ_ROUTING_KEY, "document.deleting", "DROP_PARTITION_COMMAND"]:
         channel.queue_bind(exchange=RABBITMQ_EXCHANGE, queue=RABBITMQ_QUEUE, routing_key=routing_key)
 
     channel.basic_consume(queue=RABBITMQ_QUEUE, on_message_callback=process_message)

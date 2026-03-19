@@ -49,6 +49,10 @@ public class Document {
     @Column(columnDefinition = "varchar(20) default 'PROCESSING'", nullable = false)
     private DocumentStatus status = DocumentStatus.PROCESSING;
 
+    @Builder.Default
+    @Column(name = "delete_retry_count", nullable = false)
+    private int deleteRetryCount = 0;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "conversation_id")
     private Conversation conversation;

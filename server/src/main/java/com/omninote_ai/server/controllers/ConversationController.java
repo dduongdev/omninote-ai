@@ -2,6 +2,7 @@ package com.omninote_ai.server.controllers;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.omninote_ai.server.dto.ConversationCreateRequest;
 import com.omninote_ai.server.dto.ConversationCreateResponse;
+import com.omninote_ai.server.dto.ConversationDeleteResponse;
 import com.omninote_ai.server.dto.DocumentDeleteRequest;
 import com.omninote_ai.server.dto.DocumentUploadRequest;
 import com.omninote_ai.server.dto.DocumentUploadResponse;
@@ -71,5 +73,14 @@ public class ConversationController {
             @PathVariable("conversationId") Long conversationId, DocumentDeleteRequest request) {
         documentService.deleteDocuments(conversationId, request);
         return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/api/v1/conversations/{id}")
+    public ResponseEntity<ConversationDeleteResponse> deleteConversation(@PathVariable("id") Long id) {
+        ConversationDeleteResponse response = conversationService.deleteConversation(id);
+        if ("DELETED".equals(response.getStatus())) {
+            return ResponseEntity.ok(response);
+        }
+        return ResponseEntity.accepted().body(response);
     }
 }

@@ -7,6 +7,8 @@ import com.omninote_ai.server.dto.DocumentUploadResponse;
 public interface DocumentService {
     DocumentUploadResponse uploadDocuments(Long conversationId, DocumentUploadRequest request);
     void deleteDocuments(Long conversationId, DocumentDeleteRequest request);
-    void handleMilvusSoftDeleteSuccess(Long docId);
-    void handleMilvusSoftDeleteFailed(Long docId);
+    void handleMilvusDeleteSuccess(Long docId);
+    void handleMilvusDeleteFailed(Long docId);
+    void handleIngestSuccess(Long docId, String extractedObjectName);
+    void handleIngestFailed(Long docId);
 }

@@ -6,7 +6,7 @@ from extractor import ExtractorFactory
 from preprocessor import PhobertPreprocessingChain
 from chunking import ContentChunker
 from sentence_transformers import SentenceTransformer
-from vector_store import connect_milvus, get_or_create_collection, ensure_partition, document_exists, insert_chunks, delete_document_chunks, soft_delete_document_chunks, revert_soft_delete_document_chunks
+from vector_store import connect_milvus, get_or_create_collection, ensure_partition, document_exists, insert_chunks, delete_document_chunks, drop_partition_if_exists
 from database import SessionLocal
 from models import OutboxEvent
 from config import COLLECTION_NAME
@@ -122,13 +122,12 @@ class DocumentProcessingService:
             finally:
                 db.close()
 
-    def soft_delete_document(self, conversation_id: int, doc_id: str):
+    def delete_document(self, conversation_id: int, doc_id: str):
         partition_name = f"part_{conversation_id}"
         db = SessionLocal()
         try:
-            soft_delete_document_chunks(collection, partition_name, str(doc_id))
-            
-            # Outcome: Success: Phát Outbox Event MILVUS_SOFT_DELETED_SUCCESS
+            delete_document_chunks(collection, partition_name, str(doc_id))
+
             payload = {"doc_id": doc_id}
             event = OutboxEvent(
                 aggregate_type="Document",
@@ -138,12 +137,11 @@ class DocumentProcessingService:
             )
             db.add(event)
             db.commit()
-            logger.info(f"Soft deleted doc {doc_id} successfully and saved MILVUS_SOFT_DELETED_SUCCESS event.")
+            logger.info(f"Hard deleted doc {doc_id} from Milvus and saved success event.")
         except Exception as e:
             db.rollback()
-            logger.error(f"Failed to soft delete doc {doc_id}. Error: {e}")
-            
-            # Failure: Phát Outbox Event MILVUS_SOFT_DELETED_FAILED
+            logger.error(f"Failed to delete doc {doc_id} from Milvus. Error: {e}")
+
             payload = {"doc_id": doc_id, "error": str(e)}
             failed_event = OutboxEvent(
                 aggregate_type="Document",
@@ -156,22 +154,15 @@ class DocumentProcessingService:
                 db.commit()
             except Exception as fe:
                 db.rollback()
-                logger.critical(f"FATAL: Could not save failed OutboxEvent for soft delete: {fe}")
+                logger.critical(f"FATAL: Could not save failed OutboxEvent for delete: {fe}")
         finally:
             db.close()
 
-    def revert_soft_delete(self, conversation_id: int, doc_id: str):
+    def drop_partition(self, conversation_id: int):
         partition_name = f"part_{conversation_id}"
         try:
-            revert_soft_delete_document_chunks(collection, partition_name, str(doc_id))
-            logger.info(f"Reverted soft delete for doc {doc_id} in {partition_name}.")
+            drop_partition_if_exists(collection, partition_name)
+            logger.info(f"Dropped partition {partition_name} for conversation {conversation_id}.")
         except Exception as e:
-            logger.error(f"Failed to revert soft delete for doc {doc_id}. Error: {e}")
-
-    def purge_document(self, conversation_id: int, doc_id: str):
-        partition_name = f"part_{conversation_id}"
-        try:
-            delete_document_chunks(collection, partition_name, str(doc_id))
-            logger.info(f"Purged document {doc_id} in {partition_name}.")
-        except Exception as e:
-            logger.error(f"Failed to purge document {doc_id}. Error: {e}")
+            logger.error(f"Failed to drop partition {partition_name}. Error: {e}")
+            raise
