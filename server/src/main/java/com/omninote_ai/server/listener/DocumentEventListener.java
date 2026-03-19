@@ -17,6 +17,7 @@ import com.omninote_ai.server.entity.Document;
 import com.omninote_ai.server.entity.DocumentStatus;
 import com.omninote_ai.server.repositories.DocumentRepository;
 import com.omninote_ai.server.services.DocumentService;
+import com.omninote_ai.server.services.DocumentSyncService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +30,7 @@ public class DocumentEventListener {
     private final DocumentRepository documentRepository;
     private final ObjectMapper objectMapper;
     private final DocumentService documentService;
+    private final DocumentSyncService documentSyncService;
 
     @RabbitListener(queues = RabbitMqConfig.DOCUMENT_INGEST_QUEUE, ackMode = "MANUAL")
     public void onDocumentIngestEvent(String payload, 
@@ -67,12 +69,14 @@ public class DocumentEventListener {
                 document.setStatus(DocumentStatus.READY);
                 document.setExtractedObjectName(extractedObjectName);
                 documentRepository.save(document);
+                documentSyncService.syncDocumentStatus(document);
                 
                 log.info("Document {} processing succeeded. Status updated to READY", docId);
                 
             } else if ("document.ingest.failed".equals(routingKey)) {
                 document.setStatus(DocumentStatus.FAILED);
                 documentRepository.save(document);
+                documentSyncService.syncDocumentStatus(document);
                 
                 log.error("Document {} processing failed. Error: {}", docId, data.get("error"));
             } else {
