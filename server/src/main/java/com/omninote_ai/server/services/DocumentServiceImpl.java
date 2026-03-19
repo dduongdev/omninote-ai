@@ -5,7 +5,6 @@ import java.util.List;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 
 import com.omninote_ai.server.dto.DocumentSummary;
 import com.omninote_ai.server.dto.DocumentDeleteRequest;
@@ -14,12 +13,10 @@ import com.omninote_ai.server.dto.DocumentUploadResponse;
 import com.omninote_ai.server.entity.Conversation;
 import com.omninote_ai.server.entity.Document;
 import com.omninote_ai.server.entity.DocumentStatus;
-import com.omninote_ai.server.entity.User;
 import com.omninote_ai.server.exception.UploadFileException;
 import com.omninote_ai.server.mapper.DocumentMapper;
 import com.omninote_ai.server.repositories.ConversationRepository;
 import com.omninote_ai.server.repositories.DocumentRepository;
-import com.omninote_ai.server.repositories.UserRepository;
 import com.omninote_ai.server.utility.JwtUtil;
 
 import jakarta.persistence.EntityNotFoundException;
@@ -61,7 +58,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional
-    public void deleteDocuments(Long conversationId, DocumentDeleteRequest request) {
+    public DocumentSummary deleteDocument(Long conversationId, DocumentDeleteRequest request) {
         Long userId = jwtUtil.getCurrentUserId();
         Conversation conversation = conversationRepository.findById(conversationId)
             .orElseThrow(() -> new EntityNotFoundException("Conversation not found"));
@@ -85,6 +82,8 @@ public class DocumentServiceImpl implements DocumentService {
         documentRepository.save(document);
         
         outboxEventService.enqueueDeletingDocument(document);
+
+        return DocumentMapper.toSummary(document);
     }
 
     @Override

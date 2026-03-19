@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.omninote_ai.server.dto.ConversationCreateRequest;
 import com.omninote_ai.server.dto.ConversationCreateResponse;
 import com.omninote_ai.server.dto.DocumentDeleteRequest;
+import com.omninote_ai.server.dto.DocumentSummary;
 import com.omninote_ai.server.dto.DocumentUploadRequest;
 import com.omninote_ai.server.dto.DocumentUploadResponse;
 import com.omninote_ai.server.repositories.ConversationRepository;
@@ -67,9 +68,9 @@ public class ConversationController {
     }
 
     @PostMapping("/api/v1/conversations/{conversationId}/documents/delete")
-    public ResponseEntity<?> deleteDocuments(
+    public ResponseEntity<?> deleteDocument(
             @PathVariable("conversationId") Long conversationId, DocumentDeleteRequest request) {
-        documentService.deleteDocuments(conversationId, request);
-        return ResponseEntity.ok().build();
+        DocumentSummary response = documentService.deleteDocument(conversationId, request);
+        return ResponseEntity.ok(response);
     }
 }
