@@ -11,13 +11,19 @@ import org.springframework.web.multipart.MultipartFile;
 import com.omninote_ai.server.dto.ConversationCreateRequest;
 import com.omninote_ai.server.dto.ConversationCreateResponse;
 import com.omninote_ai.server.dto.ConversationDeleteResponse;
+import com.omninote_ai.server.dto.ConversationHistoryResponse;
+import com.omninote_ai.server.dto.ConversationSummary;
+import com.omninote_ai.server.dto.MessageResponse;
 import com.omninote_ai.server.entity.Conversation;
 import com.omninote_ai.server.entity.ConversationStatus;
 import com.omninote_ai.server.entity.Document;
 import com.omninote_ai.server.entity.DocumentStatus;
 import com.omninote_ai.server.exception.CreateConversationException;
 import com.omninote_ai.server.exception.UploadFileException;
+import com.omninote_ai.server.entity.Message;
 import com.omninote_ai.server.mapper.ConversationMapper;
+import com.omninote_ai.server.mapper.DocumentMapper;
+import com.omninote_ai.server.mapper.MessageMapper;
 import com.omninote_ai.server.outbox.exception.EnqueueOutboxEventException;
 import com.omninote_ai.server.repositories.ConversationRepository;
 import com.omninote_ai.server.repositories.DocumentRepository;
@@ -182,6 +188,63 @@ public class ConversationServiceImpl implements ConversationService {
                 .totalDocuments(documents.size())
                 .asyncPending(asyncDocsCount)
                 .deletedImmediately(deletedImmediately)
+                .build();
+    }
+
+    @Override
+    public List<ConversationSummary> getConversations() {
+        Long currentUserId = jwtUtil.getCurrentUserId();
+
+        List<Conversation> conversations = conversationRepository
+                .findByUserIdAndStatusNotInOrderByUpdatedAtDesc(
+                        currentUserId,
+                        List.of(ConversationStatus.DELETING, ConversationStatus.DELETE_FAILED));
+
+        return conversations.stream().map(conv -> ConversationSummary.builder()
+                .id(conv.getId())
+                .title(conv.getTitle())
+                .status(conv.getStatus().name())
+                .documentCount(conv.getDocuments().size())
+                .messageCount((int) messageRepository.countByConversationId(conv.getId()))
+                .createdAt(conv.getCreatedAt())
+                .updatedAt(conv.getUpdatedAt())
+                .build())
+                .toList();
+    }
+
+    @Override
+    public ConversationHistoryResponse getConversationHistory(Long conversationId) {
+        Long currentUserId = jwtUtil.getCurrentUserId();
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new EntityNotFoundException("Conversation not found"));
+
+        if (!conversation.getUser().getId().equals(currentUserId)) {
+            throw new AccessDeniedException("User does not own this conversation");
+        }
+
+        if (conversation.getStatus() == ConversationStatus.DELETING
+                || conversation.getStatus() == ConversationStatus.DELETE_FAILED) {
+            throw new IllegalStateException("Conversation is no longer accessible");
+        }
+
+        List<Message> messages = messageRepository
+                .findAllByConversationIdOrderByCreatedAtAsc(conversationId);
+
+        List<MessageResponse> messageResponses = messages.stream()
+                .map(MessageMapper::toResponse)
+                .toList();
+
+        return ConversationHistoryResponse.builder()
+                .conversationId(conversation.getId())
+                .title(conversation.getTitle())
+                .status(conversation.getStatus().name())
+                .documents(conversation.getDocuments().stream()
+                        .map(DocumentMapper::toSummary)
+                        .toList())
+                .messages(messageResponses)
+                .createdAt(conversation.getCreatedAt())
+                .updatedAt(conversation.getUpdatedAt())
                 .build();
     }
 
