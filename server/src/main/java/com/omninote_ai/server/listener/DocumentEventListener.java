@@ -13,9 +13,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.omninote_ai.server.config.RabbitMqConfig;
-import com.omninote_ai.server.entity.Document;
-import com.omninote_ai.server.entity.DocumentStatus;
-import com.omninote_ai.server.repositories.DocumentRepository;
 import com.omninote_ai.server.services.DocumentService;
 import com.omninote_ai.server.services.DocumentSyncService;
 
@@ -27,7 +24,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DocumentEventListener {
 
-    private final DocumentRepository documentRepository;
     private final ObjectMapper objectMapper;
     private final DocumentService documentService;
     private final DocumentSyncService documentSyncService;
@@ -50,35 +46,11 @@ public class DocumentEventListener {
             }
             Long docId = Long.valueOf(docIdObj.toString());
 
-            Document document = documentRepository.findById(docId).orElse(null);
-            if (document == null) {
-                log.error("Document with id {} not found in database", docId);
-                channel.basicAck(deliveryTag, false);
-                return;
-            }
-
-            if (document.getStatus() == DocumentStatus.READY) {
-                log.info("Document {} is already READY. Skipping to ensure idempotency.", docId);
-                channel.basicAck(deliveryTag, false);
-                return;
-            }
-
             if ("document.ingest.succeed".equals(routingKey)) {
-                String extractedObjectName = (String) data.getOrDefault("extracted_object_name", document.getExtractedObjectName());
-                
-                document.setStatus(DocumentStatus.READY);
-                document.setExtractedObjectName(extractedObjectName);
-                documentRepository.save(document);
-                documentSyncService.syncDocumentStatus(document);
-                
-                log.info("Document {} processing succeeded. Status updated to READY", docId);
-                
+                String extractedObjectName = (String) data.getOrDefault("extracted_object_name", null);
+                documentService.handleIngestSuccess(docId, extractedObjectName);
             } else if ("document.ingest.failed".equals(routingKey)) {
-                document.setStatus(DocumentStatus.FAILED);
-                documentRepository.save(document);
-                documentSyncService.syncDocumentStatus(document);
-                
-                log.error("Document {} processing failed. Error: {}", docId, data.get("error"));
+                documentService.handleIngestFailed(docId);
             } else {
                 log.warn("Unknown routing key: {}", routingKey);
             }
@@ -95,19 +67,19 @@ public class DocumentEventListener {
     }
 
     @RabbitListener(queues = RabbitMqConfig.DOCUMENT_SOFT_DELETED_SUCCESS_QUEUE, ackMode = "MANUAL")
-    public void onMilvusSoftDeletedSuccess(String payload,
-                                           @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey,
-                                           @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag, 
-                                           Channel channel) throws IOException {
-        log.info("Received Milvus soft delete success event: {}", payload);
+    public void onMilvusDeletedSuccess(String payload,
+                                       @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey,
+                                       @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag, 
+                                       Channel channel) throws IOException {
+        log.info("Received Milvus delete success event: {}", payload);
         try {
             com.omninote_ai.server.event.MilvusSoftDeletedSuccessEvent event = 
                 objectMapper.readValue(payload, com.omninote_ai.server.event.MilvusSoftDeletedSuccessEvent.class);
             
             if (event.getDocId() != null) {
-                documentService.handleMilvusSoftDeleteSuccess(event.getDocId());
+                documentService.handleMilvusDeleteSuccess(event.getDocId());
             } else {
-                log.error("doc_id is null in MilvusSoftDeletedSuccessEvent");
+                log.error("doc_id is null in MilvusDeletedSuccessEvent");
             }
             channel.basicAck(deliveryTag, false);
         } catch (JsonProcessingException e) {
@@ -120,19 +92,19 @@ public class DocumentEventListener {
     }
 
     @RabbitListener(queues = RabbitMqConfig.DOCUMENT_SOFT_DELETED_FAILED_QUEUE, ackMode = "MANUAL")
-    public void onMilvusSoftDeletedFailed(String payload,
-                                          @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey,
-                                          @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag, 
-                                          Channel channel) throws IOException {
-        log.info("Received Milvus soft delete failed event: {}", payload);
+    public void onMilvusDeletedFailed(String payload,
+                                      @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey,
+                                      @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag, 
+                                      Channel channel) throws IOException {
+        log.info("Received Milvus delete failed event: {}", payload);
         try {
             com.omninote_ai.server.event.MilvusSoftDeletedFailedEvent event = 
                 objectMapper.readValue(payload, com.omninote_ai.server.event.MilvusSoftDeletedFailedEvent.class);
             
             if (event.getDocId() != null) {
-                documentService.handleMilvusSoftDeleteFailed(event.getDocId());
+                documentService.handleMilvusDeleteFailed(event.getDocId());
             } else {
-                log.error("doc_id is null in MilvusSoftDeletedFailedEvent");
+                log.error("doc_id is null in MilvusDeletedFailedEvent");
             }
             channel.basicAck(deliveryTag, false);
         } catch (JsonProcessingException e) {

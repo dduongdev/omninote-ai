@@ -5,5 +5,6 @@ public enum DocumentStatus {
     FAILED,
     READY,
     DELETING,
-    DELETED
+    DELETED,
+    DELETE_FAILED
 }

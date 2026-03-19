@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.omninote_ai.server.entity.Document;
+import com.omninote_ai.server.event.ConversationDeletedEvent;
 import com.omninote_ai.server.event.DocumentDeletedEvent;
 import com.omninote_ai.server.event.DocumentDeletingEvent;
 import com.omninote_ai.server.event.DocumentUploadedEvent;
@@ -121,40 +122,20 @@ public class OutboxEventService {
         outboxEventRepository.save(event);
     }
 
-    public void enqueueMilvusRevertSoftDelete(Document document) {
+    public void enqueueDropPartitionCommand(Long conversationId) {
         OutboxEvent event = new OutboxEvent();
-        event.setAggregateId(document.getId());
-        event.setAggregateType(Document.class.getSimpleName());
-        event.setEventType("MILVUS_REVERT_SOFT_DELETE");
+        event.setAggregateId(conversationId);
+        event.setAggregateType("Conversation");
+        event.setEventType("DROP_PARTITION_COMMAND");
 
-        com.omninote_ai.server.event.DocumentDeletedEvent payload = com.omninote_ai.server.event.DocumentDeletedEvent.builder()
-            .documentId(document.getId())
-            .conversationId(document.getConversation().getId())
+        ConversationDeletedEvent payload = ConversationDeletedEvent.builder()
+            .conversationId(conversationId)
             .build();
         try {
             String payloadJson = objectMapper.writeValueAsString(payload);
             event.setPayload(payloadJson);
         } catch (Exception e) {
-            throw new EnqueueOutboxEventException("Failed to serialize document for outbox event", e);
-        }
-        outboxEventRepository.save(event);
-    }
-
-    public void enqueueFinalPurgeCommand(Document document) {
-        OutboxEvent event = new OutboxEvent();
-        event.setAggregateId(document.getId());
-        event.setAggregateType(Document.class.getSimpleName());
-        event.setEventType("FINAL_PURGE_COMMAND");
-
-        com.omninote_ai.server.event.DocumentDeletedEvent payload = com.omninote_ai.server.event.DocumentDeletedEvent.builder()
-            .documentId(document.getId())
-            .conversationId(document.getConversation().getId())
-            .build();
-        try {
-            String payloadJson = objectMapper.writeValueAsString(payload);
-            event.setPayload(payloadJson);
-        } catch (Exception e) {
-            throw new EnqueueOutboxEventException("Failed to serialize document for outbox event", e);
+            throw new EnqueueOutboxEventException("Failed to serialize conversation deleted event", e);
         }
         outboxEventRepository.save(event);
     }

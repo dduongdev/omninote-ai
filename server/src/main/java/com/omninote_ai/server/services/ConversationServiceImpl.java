@@ -4,19 +4,24 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.omninote_ai.server.dto.ConversationCreateRequest;
 import com.omninote_ai.server.dto.ConversationCreateResponse;
+import com.omninote_ai.server.dto.ConversationDeleteResponse;
 import com.omninote_ai.server.entity.Conversation;
+import com.omninote_ai.server.entity.ConversationStatus;
 import com.omninote_ai.server.entity.Document;
+import com.omninote_ai.server.entity.DocumentStatus;
 import com.omninote_ai.server.exception.CreateConversationException;
 import com.omninote_ai.server.exception.UploadFileException;
 import com.omninote_ai.server.mapper.ConversationMapper;
 import com.omninote_ai.server.outbox.exception.EnqueueOutboxEventException;
 import com.omninote_ai.server.repositories.ConversationRepository;
 import com.omninote_ai.server.repositories.DocumentRepository;
+import com.omninote_ai.server.repositories.MessageRepository;
 import com.omninote_ai.server.repositories.UserRepository;
 import com.omninote_ai.server.utility.JwtUtil;
 
@@ -36,7 +41,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final OutboxEventService outboxEventService;
     private final JwtUtil jwtUtil;
     private final DocumentRepository documentRepository;
-    private final DocumentSyncService documentSyncService;
+    private final MessageRepository messageRepository;
 
     @Override
     @Transactional
@@ -91,5 +96,112 @@ public class ConversationServiceImpl implements ConversationService {
         }
 
         return uploadedDocuments;
+    }
+
+    @Override
+    @Transactional
+    public ConversationDeleteResponse deleteConversation(Long conversationId) {
+        Long currentUserId = jwtUtil.getCurrentUserId();
+        Conversation conversation = conversationRepository.findById(conversationId)
+            .orElseThrow(() -> new EntityNotFoundException("Conversation not found"));
+
+        if (!conversation.getUser().getId().equals(currentUserId)) {
+            throw new AccessDeniedException("User does not own this conversation");
+        }
+
+        if (conversation.getStatus() == ConversationStatus.DELETING) {
+            throw new IllegalStateException("Conversation is already being deleted");
+        }
+
+        conversation.setStatus(ConversationStatus.DELETING);
+        conversationRepository.save(conversation);
+
+        messageRepository.deleteCitationsByConversationId(conversationId);
+        messageRepository.deleteMessageDocumentsByConversationId(conversationId);
+        messageRepository.deleteAllByConversationId(conversationId);
+
+        List<Document> documents = documentRepository.findAllByConversationId(conversationId);
+        int asyncDocsCount = 0;
+        int deletedImmediately = 0;
+
+        for (Document document : documents) {
+            switch (document.getStatus()) {
+                case READY:
+                    document.setStatus(DocumentStatus.DELETING);
+                    documentRepository.save(document);
+                    outboxEventService.enqueueDeletingDocument(document);
+                    asyncDocsCount++;
+                    break;
+
+                case PROCESSING:
+                    document.setStatus(DocumentStatus.DELETING);
+                    documentRepository.save(document);
+                    asyncDocsCount++;
+                    break;
+
+                case FAILED:
+                    cleanupFailedDocument(document);
+                    deletedImmediately++;
+                    break;
+
+                case DELETING:
+                case DELETE_FAILED:
+                    asyncDocsCount++;
+                    break;
+
+                default:
+                    log.warn("Unknown document status {} for doc {}", document.getStatus(), document.getId());
+                    asyncDocsCount++;
+                    break;
+            }
+        }
+
+        if (asyncDocsCount == 0) {
+            conversationRepository.delete(conversation);
+            outboxEventService.enqueueDropPartitionCommand(conversationId);
+            log.info("Conversation {} deleted immediately (no async docs)", conversationId);
+
+            return ConversationDeleteResponse.builder()
+                    .conversationId(conversationId)
+                    .status("DELETED")
+                    .message("Conversation deleted successfully")
+                    .totalDocuments(documents.size())
+                    .asyncPending(0)
+                    .deletedImmediately(deletedImmediately)
+                    .build();
+        }
+
+        log.info("Conversation {} marked as DELETING, {} docs pending async cleanup",
+                conversationId, asyncDocsCount);
+
+        return ConversationDeleteResponse.builder()
+                .conversationId(conversationId)
+                .status("DELETING")
+                .message("Conversation deletion in progress. " + asyncDocsCount
+                        + " document(s) being cleaned up asynchronously.")
+                .totalDocuments(documents.size())
+                .asyncPending(asyncDocsCount)
+                .deletedImmediately(deletedImmediately)
+                .build();
+    }
+
+    private void cleanupFailedDocument(Document document) {
+        try {
+            if (document.getObjectName() != null) {
+                minioService.deleteFile(document.getObjectName());
+            }
+        } catch (Exception e) {
+            log.error("Failed to delete original MinIO file for doc {}: {}",
+                    document.getId(), e.getMessage());
+        }
+        try {
+            if (document.getExtractedObjectName() != null) {
+                minioService.deleteFile(document.getExtractedObjectName());
+            }
+        } catch (Exception e) {
+            log.error("Failed to delete extracted MinIO file for doc {}: {}",
+                    document.getId(), e.getMessage());
+        }
+        documentRepository.delete(document);
     }
 }
