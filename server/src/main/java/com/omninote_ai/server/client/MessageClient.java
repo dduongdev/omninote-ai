@@ -7,12 +7,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import com.omninote_ai.server.dto.MessageCreateRequest;
 import com.omninote_ai.server.dto.MessageResponse;
 
-@FeignClient(name = "ai-service",
-   // configuration = FeignConfig.class,
-    fallback=MessageClientFallback.class,
-    url="http://localhost:8533"
+@FeignClient(
+    name = "ai-service", 
+    path = "/api/v1/ai",
+    fallback = MessageClientFallback.class
 )
 public interface MessageClient {
-    @PostMapping("/api/v1/ai/chat")
+
+    @PostMapping("/chat")
     MessageResponse generateAIResponse(@RequestBody MessageCreateRequest request);
 }

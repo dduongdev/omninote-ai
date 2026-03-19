@@ -142,6 +142,8 @@ services:
       - MILVUS_HOST=milvus-standalone
       - MILVUS_PORT=19530
       - HF_TOKEN=${HF_TOKEN}
+    volumes:
+      - hf-cache:/root/.cache/huggingface
     restart: unless-stopped
 
   etcd:
@@ -177,4 +179,5 @@ services:
 
 volumes:
   etcd-data:
-  milvus-data: 
+  milvus-data:
+  hf-cache:

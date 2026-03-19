@@ -45,11 +45,11 @@ public class ChatServiceImpl implements ChatService {
 
         // 1. Fetch and Validate Conversation Ownership
         if (!conversationRepository.existsByIdAndUserId(request.getConversationId(), currentUserId)) {
-             throw new RuntimeException("Cuộc hội thoại không tồn tại hoặc không thuộc về người dùng này");
+             throw new RuntimeException("This conversation does not exist or does not belong to this user.");
         }
 
         Conversation conv = conversationRepository.findById(request.getConversationId())
-                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy hội thoại"));
+                .orElseThrow(() -> new EntityNotFoundException("No conversation found."));
 
         // 2. Validate selected documents
         List<Document> selectedDocs = validateAndGetDocuments(request, conv);
@@ -67,19 +67,19 @@ public class ChatServiceImpl implements ChatService {
 
     private List<Document> validateAndGetDocuments(MessageCreateRequest request, Conversation conv) {
         if (request.getDocumentIds() == null || request.getDocumentIds().isEmpty()) {
-            throw new SelectedFileException("Vui lòng chọn ít nhất một tài liệu.");
+            throw new SelectedFileException("Please select at least one document.");
         }
 
         List<Document> selectedDocs = documentRepository.findAllById(request.getDocumentIds());
         if (selectedDocs.size() != request.getDocumentIds().size()) {
-            throw new SelectedFileException("Một số tài liệu được chọn không tồn tại.");
+            throw new SelectedFileException("Some of the selected documents do not exist.");
         }
 
         boolean allBelongToConv = selectedDocs.stream()
                 .allMatch(d -> d.getConversation() != null && d.getConversation().getId().equals(conv.getId()));
         
         if (!allBelongToConv) {
-            throw new SelectedFileException("Một số tài liệu không thuộc về cuộc hội thoại này.");
+            throw new SelectedFileException("Some of the documents are not part of this conversation.");
         }
         
         return selectedDocs;
