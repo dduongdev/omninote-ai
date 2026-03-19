@@ -36,6 +36,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final OutboxEventService outboxEventService;
     private final JwtUtil jwtUtil;
     private final DocumentRepository documentRepository;
+    private final DocumentSyncService documentSyncService;
 
     @Override
     @Transactional
@@ -72,6 +73,10 @@ public class ConversationServiceImpl implements ConversationService {
             conversation.getDocuments().addAll(uploadedDocuments);
             documentRepository.saveAll(uploadedDocuments);
             conversation = conversationRepository.save(conversation);
+
+            for (Document doc : uploadedDocuments) {
+                documentSyncService.syncDocumentStatus(doc);
+            }
 
             outboxEventService.enqueueUploadedDocuments(uploadedDocuments);
         } catch (UploadFileException | EnqueueOutboxEventException e) {

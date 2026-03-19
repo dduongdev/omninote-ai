@@ -31,6 +31,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final DocumentRepository documentRepository;
     private final OutboxEventService outboxEventService;
     private final MinioService minioService;
+    private final DocumentSyncService documentSyncService;
 
     @Override
     @Transactional
@@ -80,7 +81,8 @@ public class DocumentServiceImpl implements DocumentService {
 
         document.setStatus(DocumentStatus.DELETING);
         documentRepository.save(document);
-        
+        documentSyncService.syncDocumentStatus(document);
+
         outboxEventService.enqueueDeletingDocument(document);
 
         return DocumentMapper.toSummary(document);
@@ -93,6 +95,7 @@ public class DocumentServiceImpl implements DocumentService {
             .orElseThrow(() -> new EntityNotFoundException("Document not found"));
         document.setStatus(DocumentStatus.READY);
         documentRepository.save(document);
+        documentSyncService.syncDocumentStatus(document);
     }
 
     @Override
@@ -107,10 +110,14 @@ public class DocumentServiceImpl implements DocumentService {
             if (document.getExtractedObjectName() != null) {
                 minioService.deleteFile(document.getExtractedObjectName());
             }
+            document.setStatus(DocumentStatus.DELETED);
+            documentSyncService.syncDocumentStatus(document);
+            
             outboxEventService.enqueueFinalPurgeCommand(document);
         } catch (Exception e) {
             document.setStatus(DocumentStatus.READY);
             documentRepository.save(document);
+            documentSyncService.syncDocumentStatus(document);
             outboxEventService.enqueueMilvusRevertSoftDelete(document);
         }
     }
