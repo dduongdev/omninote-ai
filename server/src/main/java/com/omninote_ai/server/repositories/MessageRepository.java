@@ -12,6 +12,10 @@ import java.util.List;
 public interface MessageRepository extends JpaRepository<Message, Long> {
     List<Message> findAllByConversationId(Long conversationId);
 
+    List<Message> findAllByConversationIdOrderByCreatedAtAsc(Long conversationId);
+
+    long countByConversationId(Long conversationId);
+
     @Modifying
     @Query(value = "DELETE FROM message_citations WHERE message_id IN (SELECT id FROM messages WHERE conversation_id = :convId)", nativeQuery = true)
     void deleteCitationsByConversationId(@Param("convId") Long conversationId);

@@ -9,9 +9,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 import com.omninote_ai.server.dto.ConversationCreateRequest;
 import com.omninote_ai.server.dto.ConversationCreateResponse;
 import com.omninote_ai.server.dto.ConversationDeleteResponse;
+import com.omninote_ai.server.dto.ConversationHistoryResponse;
+import com.omninote_ai.server.dto.ConversationSummary;
 import com.omninote_ai.server.dto.DocumentDeleteRequest;
 import com.omninote_ai.server.dto.DocumentUploadRequest;
 import com.omninote_ai.server.dto.DocumentUploadResponse;
@@ -34,6 +38,18 @@ public class ConversationController {
     private final UserRepository userRepository;
     private final ConversationRepository conversationRepository;
     private final DocumentService documentService;
+
+    @GetMapping("/api/v1/conversations")
+    public ResponseEntity<List<ConversationSummary>> getConversations() {
+        List<ConversationSummary> conversations = conversationService.getConversations();
+        return ResponseEntity.ok(conversations);
+    }
+
+    @GetMapping("/api/v1/conversations/{id}/history")
+    public ResponseEntity<ConversationHistoryResponse> getConversationHistory(@PathVariable("id") Long id) {
+        ConversationHistoryResponse response = conversationService.getConversationHistory(id);
+        return ResponseEntity.ok(response);
+    }
 
     @PostMapping("/api/v1/conversations/create")
     public ResponseEntity<?> createConversation(@Valid ConversationCreateRequest request) {
