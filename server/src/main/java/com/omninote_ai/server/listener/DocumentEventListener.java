@@ -14,6 +14,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.omninote_ai.server.config.RabbitMqConfig;
 import com.omninote_ai.server.services.DocumentService;
+import com.omninote_ai.server.services.DocumentSyncService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +26,7 @@ public class DocumentEventListener {
 
     private final ObjectMapper objectMapper;
     private final DocumentService documentService;
+    private final DocumentSyncService documentSyncService;
 
     @RabbitListener(queues = RabbitMqConfig.DOCUMENT_INGEST_QUEUE, ackMode = "MANUAL")
     public void onDocumentIngestEvent(String payload, 

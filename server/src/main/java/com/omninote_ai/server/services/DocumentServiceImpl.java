@@ -33,6 +33,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final DocumentRepository documentRepository;
     private final OutboxEventService outboxEventService;
     private final MinioService minioService;
+    private final DocumentSyncService documentSyncService;
 
     @Override
     @Transactional
@@ -65,7 +66,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional
-    public void deleteDocuments(Long conversationId, DocumentDeleteRequest request) {
+    public DocumentSummary deleteDocument(Long conversationId, DocumentDeleteRequest request) {
         Long userId = jwtUtil.getCurrentUserId();
         Conversation conversation = conversationRepository.findById(conversationId)
             .orElseThrow(() -> new EntityNotFoundException("Conversation not found"));
@@ -91,8 +92,11 @@ public class DocumentServiceImpl implements DocumentService {
 
         document.setStatus(DocumentStatus.DELETING);
         documentRepository.save(document);
-        
+        documentSyncService.syncDocumentStatus(document);
+
         outboxEventService.enqueueDeletingDocument(document);
+
+        return DocumentMapper.toSummary(document);
     }
 
     private static final int MAX_DELETE_RETRIES = 3;

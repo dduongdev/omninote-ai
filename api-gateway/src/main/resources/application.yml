@@ -23,7 +23,7 @@ spring:
       globalcors:
         cors-configurations:
           '[/**]':
-            allowedOrigins: "*"
+            allowedOriginPatterns: "*"
             allowedMethods:
               - GET
               - POST
@@ -31,6 +31,10 @@ spring:
               - DELETE
               - OPTIONS
             allowedHeaders: "*"
+            allowCredentials: true
+
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
       
       # 2. Cấu hình Routing (Chuyển hướng request)
       routes:
@@ -39,7 +43,11 @@ spring:
           uri: lb://server
           predicates:
             - Path=/api/auth/**,/api/users/**,/api/*/conversations/**,/api/*/chat/**
-
+        # --- WebSocket Route (Server) ---
+        - id: websocket-route
+          uri: lb://server
+          predicates:
+            - Path=/ws/**
         # --- AI Service ---
         - id: ai-service-route
           uri: lb://ai-service

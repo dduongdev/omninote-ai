@@ -79,6 +79,10 @@ public class ConversationServiceImpl implements ConversationService {
             documentRepository.saveAll(uploadedDocuments);
             conversation = conversationRepository.save(conversation);
 
+            for (Document doc : uploadedDocuments) {
+                documentSyncService.syncDocumentStatus(doc);
+            }
+
             outboxEventService.enqueueUploadedDocuments(uploadedDocuments);
         } catch (UploadFileException | EnqueueOutboxEventException e) {
             for (Document doc : uploadedDocuments) {
