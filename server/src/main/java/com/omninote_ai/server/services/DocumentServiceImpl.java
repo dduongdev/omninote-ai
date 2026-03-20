@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.omninote_ai.server.dto.DocumentDeleteRequest;
+import com.omninote_ai.server.dto.DocumentSummary;
 import com.omninote_ai.server.dto.DocumentUploadRequest;
 import com.omninote_ai.server.dto.DocumentUploadResponse;
 import com.omninote_ai.server.entity.Conversation;

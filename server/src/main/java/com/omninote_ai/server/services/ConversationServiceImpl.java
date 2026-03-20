@@ -48,6 +48,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final JwtUtil jwtUtil;
     private final DocumentRepository documentRepository;
     private final MessageRepository messageRepository;
+    private final DocumentSyncService documentSyncService;
 
     @Override
     @Transactional

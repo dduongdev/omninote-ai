@@ -1,6 +1,7 @@
 import pika
 import json
 import logging
+import time
 import concurrent.futures
 from config import RABBITMQ_HOST, RABBITMQ_USER, RABBITMQ_PASSWORD, RABBITMQ_QUEUE, RABBITMQ_EXCHANGE, RABBITMQ_ROUTING_KEY
 from document_service import DocumentProcessingService
@@ -71,19 +72,37 @@ def process_message(ch, method, properties, body):
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
         logger.info("Message Nacked and Requeued directly.")
 
+def connect_rabbitmq(max_retries=10, retry_delay=5):
+    credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASSWORD)
+    for attempt in range(1, max_retries + 1):
+        try:
+            connection = pika.BlockingConnection(
+                pika.ConnectionParameters(
+                    host=RABBITMQ_HOST,
+                    credentials=credentials,
+                    heartbeat=600,
+                    blocked_connection_timeout=300
+                )
+            )
+            logger.info("Connected to RabbitMQ successfully.")
+            return connection
+        except pika.exceptions.AMQPConnectionError:
+            logger.warning("RabbitMQ not ready, retry %d/%d in %ds...", attempt, max_retries, retry_delay)
+            time.sleep(retry_delay)
+    raise RuntimeError(f"Could not connect to RabbitMQ after {max_retries} retries")
+
 def main():
     ensure_bucket_exists()
     start_outbox_publisher() 
     logger.info("Starting RabbitMQ consumer...")
-    credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASSWORD)
-    connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST, credentials=credentials, heartbeat=600, blocked_connection_timeout=300))
+
+    connection = connect_rabbitmq()
     channel = connection.channel()
     
     channel.exchange_declare(exchange=RABBITMQ_EXCHANGE, exchange_type='topic', durable=True)
     
     channel.queue_declare(queue=RABBITMQ_QUEUE, durable=True)
     
-    # Bind multiple routing keys
     for routing_key in [RABBITMQ_ROUTING_KEY, "document.deleting", "DROP_PARTITION_COMMAND"]:
         channel.queue_bind(exchange=RABBITMQ_EXCHANGE, queue=RABBITMQ_QUEUE, routing_key=routing_key)
 
