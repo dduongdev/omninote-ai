@@ -94,8 +94,8 @@ def local_rerank(query: str, candidates: List[str]) -> List[float]:
 def renumber_citations(text: str, top_chunks: List[Dict]) -> Tuple[str, List]:
     """
     Thay thế MỌI [N] trong text bằng số tăng dần [1],[2],[3],...
-    - Không phụ thuộc vào model có đánh số đúng không
-    - Mỗi lần xuất hiện [N] đều được gán số mới, kể cả cùng N
+    - Context được đánh nhãn 1-based: [1],[2],[3] → top_chunks[0],[1],[2]
+    - Mỗi lần xuất hiện [N] tạo một citation mới trong danh sách (kể cả cùng N)
     - Trả về (text_mới, danh_sách_citations_tương_ứng)
     """
     num_chunks = len(top_chunks)
@@ -104,14 +104,14 @@ def renumber_citations(text: str, top_chunks: List[Dict]) -> Tuple[str, List]:
 
     def replace_each(match: re.Match) -> str:
         original_idx = int(match.group(1))
-        # Map về chunk hợp lệ (0-based từ model → clamp vào range)
-        chunk_idx = min(max(original_idx, 0), num_chunks - 1)
+        # Context 1-based → 0-based index vào top_chunks, clamp vào range hợp lệ
+        chunk_idx = min(max(original_idx - 1, 0), num_chunks - 1)
         chunk = top_chunks[chunk_idx]
         citation_list.append(Citation(
             documentId=int(chunk["doc_id"]),
             startIndex=int(chunk["start_idx"]),
             endIndex=int(chunk["end_idx"]),
-            fileName=(chunk["content"] or "")[:150] + "..."
+            fileName=None  # Java sẽ lấy fileName từ Document entity
         ))
         new_num = counter[0]
         counter[0] += 1
@@ -388,16 +388,16 @@ async def generate_ai_response(
                   f"content='{str(c['content'])[:80]}...'")
 
         top_chunks = sorted_candidates[:3]
-        print(f"\n[CONTEXT] Sử dụng {len(top_chunks)} chunks cho LLM:")
+        print(f"\n[CONTEXT] Sử dụng {len(top_chunks)} chunks cho LLM (nhãn 1-based):")
         for i, chunk in enumerate(top_chunks):
-            print(f"  [{i}] doc_id={chunk['doc_id']} | score={chunk['rerank_score']:.4f} | "
+            print(f"  [{i + 1}] doc_id={chunk['doc_id']} | score={chunk['rerank_score']:.4f} | "
                   f"content='{str(chunk['content'])[:100]}...'")
         print(f"{'='*60}\n")
 
-        # Bước 5: Chuẩn bị context (0-based cho model)
+        # Bước 5: Chuẩn bị context (1-based, khớp với system prompt [1],[2],[3])
         context_str = ""
         for i, chunk in enumerate(top_chunks):
-            context_str += f" Tài liệu [{i}]: {chunk['content']}\n\n"
+            context_str += f" Tài liệu [{i + 1}]: {chunk['content']}\n\n"
 
         # Bước 6: Gọi Gemma qua HF Router (OpenAI-compatible)
         user_msg = build_user_message(context_str, request.contentQuery)

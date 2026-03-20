@@ -6,6 +6,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.omninote_ai.server.dto.DocumentContentResponse;
 import com.omninote_ai.server.dto.DocumentDeleteRequest;
 import com.omninote_ai.server.dto.DocumentSummary;
 import com.omninote_ai.server.dto.DocumentUploadRequest;
@@ -98,6 +99,34 @@ public class DocumentServiceImpl implements DocumentService {
         outboxEventService.enqueueDeletingDocument(document);
 
         return DocumentMapper.toSummary(document);
+    }
+
+    @Override
+    public DocumentContentResponse getDocumentContent(Long conversationId, Long documentId) {
+        Long userId = jwtUtil.getCurrentUserId();
+
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new EntityNotFoundException("Document not found"));
+
+        if (!document.getConversation().getId().equals(conversationId)) {
+            throw new AccessDeniedException("Document does not belong to the specified conversation");
+        }
+
+        if (!document.getConversation().getUser().getId().equals(userId)) {
+            throw new AccessDeniedException("User does not own this conversation");
+        }
+
+        String objectName = document.getExtractedObjectName() != null
+                ? document.getExtractedObjectName()
+                : document.getObjectName();
+
+        String content = minioService.getFileContent(objectName);
+
+        return DocumentContentResponse.builder()
+                .documentId(document.getId())
+                .fileName(document.getFileName())
+                .content(content)
+                .build();
     }
 
     private static final int MAX_DELETE_RETRIES = 3;

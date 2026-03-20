@@ -9,7 +9,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.omninote_ai.server.exception.UploadFileException;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+
 import io.minio.BucketExistsArgs;
+import io.minio.GetObjectArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -63,6 +67,18 @@ public class MinioService {
             return objectName;
         } catch (Exception e) {
             throw new UploadFileException("Upload file to MinIO failed", e);
+        }
+    }
+
+    public String getFileContent(String objectName) {
+        try (InputStream stream = minioClient.getObject(
+                GetObjectArgs.builder()
+                        .bucket(bucketName)
+                        .object(objectName)
+                        .build())) {
+            return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new RuntimeException("Get file content from MinIO failed: " + objectName, e);
         }
     }
 

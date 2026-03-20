@@ -16,6 +16,7 @@ import com.omninote_ai.server.dto.ConversationCreateResponse;
 import com.omninote_ai.server.dto.ConversationDeleteResponse;
 import com.omninote_ai.server.dto.ConversationHistoryResponse;
 import com.omninote_ai.server.dto.ConversationSummary;
+import com.omninote_ai.server.dto.DocumentContentResponse;
 import com.omninote_ai.server.dto.DocumentDeleteRequest;
 import com.omninote_ai.server.dto.DocumentSummary;
 import com.omninote_ai.server.dto.DocumentUploadRequest;
@@ -82,6 +83,14 @@ public class ConversationController {
             @PathVariable("conversationId") Long conversationId,
             @Valid DocumentUploadRequest request) {
         DocumentUploadResponse response = documentService.uploadDocuments(conversationId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/api/v1/conversations/{conversationId}/documents/{documentId}/content")
+    public ResponseEntity<DocumentContentResponse> getDocumentContent(
+            @PathVariable("conversationId") Long conversationId,
+            @PathVariable("documentId") Long documentId) {
+        DocumentContentResponse response = documentService.getDocumentContent(conversationId, documentId);
         return ResponseEntity.ok(response);
     }
 

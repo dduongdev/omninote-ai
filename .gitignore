@@ -1,3 +1,4 @@
 .env
 /docs
 .venv/
+/node_modules/
