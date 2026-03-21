@@ -3,16 +3,18 @@ import re
 import asyncio
 import requests
 import numpy as np
+import torch
 from typing import List, Optional, Dict, Any, Tuple
 from contextlib import asynccontextmanager
 
 # Local AI models
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import CrossEncoder
+from FlagEmbedding import BGEM3FlagModel
 
 # FastAPI & Tools
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
-from pymilvus import Collection, connections
+from pymilvus import Collection, connections, AnnSearchRequest, RRFRanker
 
 # Các module nội bộ
 from config import MILVUS_HOST, MILVUS_PORT, COLLECTION_NAME, HF_TOKEN
@@ -69,53 +71,65 @@ def hf_generate(system_prompt: str, user_message: str) -> str:
     # OpenAI format: {"choices": [{"message": {"content": "..."}}]}
     return result["choices"][0]["message"]["content"].strip()
 
-def local_embed(texts: List[str]) -> List[List[float]]:
-    """Dùng SentenceTransformer local - cùng model với document_service.py"""
+def local_embed(texts: List[str]) -> Tuple[List[List[float]], List[Dict[int, float]]]:
+    """Dùng BGEM3FlagModel local - tạo cả dense và sparse vectors"""
     embedder = AI_MODELS.get("embedder")
     if not embedder:
         raise RuntimeError("Embedding model chưa sẵn sàng")
-    embeddings = embedder.encode(texts, normalize_embeddings=True)
-    return embeddings.tolist()
+    
+    outputs = embedder.encode(texts, return_dense=True, return_sparse=True, return_colbert_vecs=False)
+    dense_vecs = outputs['dense_vecs'].tolist()
+    
+    # sparse vector dict: string -> float (token id -> weight). Milvus needs int -> float.
+    sparse_vecs = [{int(k): float(v) for k, v in lw.items()} for lw in outputs['lexical_weights']]
+    
+    return dense_vecs, sparse_vecs
 
 def local_rerank(query: str, candidates: List[str]) -> List[float]:
-    """Reranking bằng cosine similarity với embedding model local"""
-    embedder = AI_MODELS.get("embedder")
-    if not embedder:
-        raise RuntimeError("Embedding model chưa sẵn sàng")
-    # Encode query và candidates
-    query_vec = embedder.encode([query], normalize_embeddings=True)
-    cand_vecs = embedder.encode(candidates, normalize_embeddings=True)
-    # Cosine similarity (đã normalize nên chỉ cần dot product)
-    scores = np.dot(cand_vecs, query_vec.T).flatten().tolist()
-    return scores
+    """Reranking bằng CrossEncoder"""
+    reranker = AI_MODELS.get("reranker")
+    if not reranker:
+        raise RuntimeError("Reranker model chưa sẵn sàng")
+    
+    pairs = [[query, cand] for cand in candidates]
+    scores = reranker.predict(pairs)
+    
+    if isinstance(scores, np.ndarray):
+        return scores.flatten().tolist()
+    elif isinstance(scores, list):
+        return [float(s) for s in scores]
+    return [float(scores)]
 
 # --- 4. POST-PROCESSING: Đánh số lại citation tuần tự, không lặp ---
 
 def renumber_citations(text: str, top_chunks: List[Dict]) -> Tuple[str, List]:
     """
-    Thay thế MỌI [N] trong text bằng số tăng dần [1],[2],[3],...
-    - Context được đánh nhãn 1-based: [1],[2],[3] → top_chunks[0],[1],[2]
-    - Mỗi lần xuất hiện [N] tạo một citation mới trong danh sách (kể cả cùng N)
-    - Trả về (text_mới, danh_sách_citations_tương_ứng)
+    LLM output dùng trực tiếp số hiệu [1], [2], [3] của context.
+    Ta parse các số này và tạo mảng citation.
+    Các câu trích dẫn cùng một [N] sẽ được map về cùng một index mới [K], 
+    giúp đánh số liên tục từ 1 và không bị nhảy số.
     """
     num_chunks = len(top_chunks)
-    counter = [1]
     citation_list = []
+    seen_map = {}
 
     def replace_each(match: re.Match) -> str:
         original_idx = int(match.group(1))
-        # Context 1-based → 0-based index vào top_chunks, clamp vào range hợp lệ
-        chunk_idx = min(max(original_idx - 1, 0), num_chunks - 1)
-        chunk = top_chunks[chunk_idx]
-        citation_list.append(Citation(
-            documentId=int(chunk["doc_id"]),
-            startIndex=int(chunk["start_idx"]),
-            endIndex=int(chunk["end_idx"]),
-            fileName=None  # Java sẽ lấy fileName từ Document entity
-        ))
-        new_num = counter[0]
-        counter[0] += 1
-        return f"[{new_num}]"
+        
+        if original_idx not in seen_map:
+            # Context 1-based → 0-based index vào top_chunks
+            chunk_idx = min(max(original_idx - 1, 0), num_chunks - 1)
+            chunk = top_chunks[chunk_idx]
+            
+            seen_map[original_idx] = len(citation_list) + 1
+            citation_list.append(Citation(
+                documentId=int(chunk["doc_id"]),
+                startIndex=int(chunk["start_idx"]),
+                endIndex=int(chunk["end_idx"]),
+                fileName=None
+            ))
+            
+        return f"[{seen_map[original_idx]}]"
 
     new_text = re.sub(r'\[(\d+)\]', replace_each, text)
     return new_text, citation_list
@@ -137,10 +151,15 @@ async def load_models_background():
         except Exception as e:
             print(f"[BG] Lỗi kết nối Milvus: {e}")
 
-        # B. Load Embedding model local (cùng model với document_service.py)
-        print("[BG] Đang load embedding model keepitreal/vietnamese-sbert ...")
-        AI_MODELS["embedder"] = SentenceTransformer('keepitreal/vietnamese-sbert')
-        print("[BG] Embedding model sẵn sàng.")
+        # B. Load Embedding & Reranker models local
+        print("[BG] Đang load embedding model BAAI/bge-m3 ...")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        use_fp16 = torch.cuda.is_available()
+        
+        AI_MODELS["embedder"] = BGEM3FlagModel('BAAI/bge-m3', use_fp16=use_fp16, device=device)
+        print("[BG] Đang load reranker model BAAI/bge-reranker-v2-m3 ...")
+        AI_MODELS["reranker"] = CrossEncoder('BAAI/bge-reranker-v2-m3', device=device)
+        print(f"[BG] AI models sẵn sàng (Device: {device}).")
 
         # C. Kiểm tra kết nối Gemma LLM qua HF Inference API
         print(f"[BG] Gemma LLM: {GEMMA_MODEL} via {HF_CHAT_URL}")
@@ -153,6 +172,15 @@ async def load_models_background():
 
         IS_READY = True
         print("--- [BG] AI Service sẵn sàng! (Embedding local + Gemma HF API) ---")
+        
+        # Mở thread chạy consumer (dùng chung các models NLP để tiết kiệm RAM)
+        try:
+            from consumer import main as start_consumer
+            import threading
+            print("[BG] Đang start RabbitMQ Consumer Thread...")
+            threading.Thread(target=start_consumer, daemon=True).start()
+        except Exception as consumer_err:
+            print(f"[BG] Error starting consumer thread: {consumer_err}")
 
     except Exception as e:
         print(f"[BG] LỖI khởi tạo: {e}")
@@ -201,82 +229,39 @@ def build_filter_expr(enabled_docs: List[str]) -> Optional[str]:
     docs_list = ",".join([f"'{d}'" for d in enabled_docs])
     return f"doc_id in [{docs_list}]"
 
-SYSTEM_PROMPT = """Bạn là một trợ lý AI chuyên phân tích tài liệu dựa trên ngữ cảnh được cung cấp.
+SYSTEM_PROMPT = """
+Bạn là một chuyên gia phân tích tài liệu. Nhiệm vụ của bạn là cung cấp câu trả lời chính xác, khách quan dựa trên NGỮ CẢNH (CONTEXT) được cung cấp.
 
 ======================
- NHIỆM VỤ
+1. NGUYÊN TẮC CỐT LÕI
 ======================
-- Trả lời câu hỏi của người dùng CHỈ dựa trên NGỮ CẢNH.
-- Không sử dụng bất kỳ kiến thức bên ngoài nào.
-
-======================
-QUY TẮC BẮT BUỘC
-======================
-
-1. GIỚI HẠN NGUỒN:
-- Chỉ sử dụng thông tin có trong NGỮ CẢNH.
-- Nếu không tìm thấy thông tin liên quan, trả lời chính xác:
-  "Tôi không tìm thấy thông tin này trong tài liệu."
-
-2. TRÍCH DẪN (CỰC KỲ QUAN TRỌNG):
-Citation là SỐ THỨ TỰ XUẤT HIỆN, KHÔNG phải ID tài liệu.
-
-Đánh số PHẢI:
-- Bắt đầu từ [1]
-- Tăng dần liên tục: [1], [2], [3], [4], ...
-- KHÔNG được bỏ số (không nhảy từ [1] → [3])
-- KHÔNG được lặp lại số (mỗi số chỉ dùng 1 lần duy nhất)
-
-Nếu một câu dùng nhiều nguồn:
-- PHẢI viết: [1][2]
-- KHÔNG được viết: [1, 2] hoặc [1 2]
-
-TUYỆT ĐỐI CẤM:
-- Dùng lại số cũ → sai
-- Gộp dạng [1, 2] → sai
-- Bỏ qua số → sai
+- TRUNG THÀNH VỚI NGỮ CẢNH: Chỉ trả lời dựa trên thông tin có trong NGỮ CẢNH. Tuyệt đối không dùng kiến thức bên ngoài hoặc tự suy luận.
+- XỬ LÝ KHI THIẾU TIN: Nếu không tìm thấy thông tin liên quan trong tài liệu, trả lời chính xác: "Tôi không tìm thấy thông tin này trong tài liệu." và không giải thích gì thêm.
+- LÀM SẠCH DỮ LIỆU: Loại bỏ các ký tự đặc biệt như: \n, \t, \r. Viết lại câu trả lời rõ ràng, mạch lạc và tự nhiên.
 
 ======================
-VÍ DỤ ĐÚNG
+2. QUY TẮC TRÍCH DẪN (CITATION)
 ======================
-
-Câu 1 → [1]  
-Câu 2 → [2]  
-Câu 3 (2 nguồn) → [3][4]  
-Câu 4 → [5]
-
-======================
-VÍ DỤ SAI (KHÔNG ĐƯỢC LÀM)
-======================
-
- Sai: [1, 2]  
- Sai: [1] ... [1]  
- Sai: [1] → [3] (thiếu [2])  
-
-3. KHÔNG SUY DIỄN:
-- Không tự suy luận vượt quá dữ liệu.
-- Không thêm thông tin không có trong context.
-
-4. LÀM SẠCH DỮ LIỆU:
-- Loại bỏ các ký tự đặc biệt như: \\n, \\t, \\r
-- Viết lại câu trả lời rõ ràng, mạch lạc.
-
-5. ƯU TIÊN ĐA NGUỒN:
-- Nếu nhiều nguồn cùng chứa thông tin → cố gắng sử dụng nhiều nguồn khác nhau.
-- Tránh chỉ dùng 1 nguồn nếu có thể dùng 2+ nguồn.
-- Nếu 1 câu dùng nhiều nguồn → citation vẫn đánh số tiếp theo 
-
-6. TRÁNH LẶP:
-- Không lặp lại cùng một ý từ nhiều nguồn nếu không cần thiết.
+- GIỮ NGUYÊN SỐ THỨ TỰ TÀI LIỆU: Chỉ sử dụng đúng số hiệu Tài liệu [i] từ NGỮ CẢNH.
+- Nếu lấy ý từ "Tài liệu [1]", hãy viết [1]. Có thể lặp lại [1] nhiều lần nếu nhiều đoạn/câu cùng dùng dữ liệu đó.
+- Nếu một ý kết hợp từ nhiều tài liệu, viết sát nhau: [1][2].
+- KHÔNG tự ý chế ra hoặc đảo lộn các số không có trong ngữ cảnh.
 
 ======================
- FORMAT OUTPUT
+3. VÍ DỤ MINH HỌA
 ======================
+- ĐÚNG: "Dự án bao gồm ba giai đoạn chính [1] với tổng ngân sách dự kiến là 5 tỷ đồng [2]. Theo thông tin ở tài liệu [1], quy trình này sẽ diễn ra song song [1][3]."
+- SAI (Định dạng): "Thông tin [1, 2]." -> Phải là [1][2].
+- SAI (Chế số): "Ý hai [4]." (khi ngữ cảnh chỉ cung cấp đến [3]).
 
-- Trả lời dạng đoạn văn rõ ràng.
-- Không giải thích về quy tắc.
-- Không thêm phần "nguồn" riêng.
-- Citation phải nằm ngay trong câu."""
+======================
+4. ĐỊNH DẠNG ĐẦU RA (FORMAT OUTPUT)
+======================
+- Trả lời dưới dạng đoạn văn rõ ràng.
+- Không giải thích về các quy tắc này trong câu trả lời.
+- Không thêm danh sách "Nguồn" hoặc "Tài liệu tham khảo" ở cuối bài.
+- Citation phải nằm ngay trong dòng văn bản, tại cuối ý được trích dẫn.
+"""
 
 def build_user_message(context: str, question: str) -> str:
     """Tạo user message chứa context + câu hỏi"""
@@ -326,22 +311,39 @@ async def generate_ai_response(
         # Bước 1: Tiền xử lý tiếng Việt
         processed_query = AI_MODELS["preprocessor"].process(request.contentQuery)
 
-        # Bước 2: Embedding câu hỏi (local - cùng model với document_service)
-        query_vector = await asyncio.to_thread(local_embed, [processed_query])
-        query_vector = query_vector[0]
+        # Bước 2: Embedding câu hỏi (Hybrid: Dense + Sparse)
+        dense_vecs, sparse_vecs = await asyncio.to_thread(local_embed, [processed_query])
+        query_dense = dense_vecs[0]
+        query_sparse = sparse_vecs[0]
 
-        # Bước 3: Truy vấn Milvus
+        # Bước 3: Truy vấn Milvus (Top 10 Small Chunks bằng Hybrid Search)
         collection = Collection(COLLECTION_NAME)
+        collection.load() # Yêu cầu load trước khi hybrid search
+        
         enabled_docs_str = [str(d) for d in request.documentIds]
         filter_expr = build_filter_expr(enabled_docs_str)
         partition_name = f"part_{request.conversationId}"
 
-        search_results = collection.search(
-            data=[query_vector],
+        dense_req = AnnSearchRequest(
+            data=[query_dense],
             anns_field="vector",
             param={"metric_type": "COSINE", "params": {"ef": 64}},
-            limit=15,
-            expr=filter_expr,
+            limit=10,
+            expr=filter_expr
+        )
+        
+        sparse_req = AnnSearchRequest(
+            data=[query_sparse],
+            anns_field="sparse_vector",
+            param={"metric_type": "IP", "params": {"drop_ratio_search": 0.2}},
+            limit=10,
+            expr=filter_expr
+        )
+
+        search_results = collection.hybrid_search(
+            reqs=[dense_req, sparse_req],
+            rerank=RRFRanker(k=60),
+            limit=10,
             partition_names=[partition_name],
             output_fields=["doc_id", "content", "start_idx", "end_idx"]
         )
@@ -364,20 +366,89 @@ async def generate_ai_response(
                   f"idx=[{h.entity.get('start_idx')},{h.entity.get('end_idx')}] | "
                   f"content='{content_preview}...'") 
 
-        # Bước 4: Reranking (local cosine similarity)
-        candidates = [{
-            "doc_id": h.entity.get("doc_id"),
-            "content": h.entity.get("content"),
-            "start_idx": h.entity.get("start_idx"),
-            "end_idx": h.entity.get("end_idx")
-        } for h in hits]
+        # Bước 4: Context Expansion (Mở rộng ngữ cảnh)
+        # Truy vấn lấy tất cả các chunks của các doc_id trong hits để tìm chunk trước + sau
+        hit_doc_ids = list(set([h.entity.get("doc_id") for h in hits]))
+        doc_ids_list = ",".join([f"'{d}'" for d in hit_doc_ids])
+        
+        all_doc_chunks = {}
+        if hit_doc_ids:
+            # Query tất cả chunks của các docs này trong Milvus
+            all_chunks_query = collection.query(
+                expr=f"doc_id in [{doc_ids_list}]",
+                output_fields=["doc_id", "content", "start_idx", "end_idx"],
+                partition_names=[partition_name],
+                limit=10000
+            )
+            # Gom nhóm theo doc_id và sắp xếp theo start_idx
+            for c in all_chunks_query:
+                doc_id = c["doc_id"]
+                if doc_id not in all_doc_chunks:
+                    all_doc_chunks[doc_id] = []
+                all_doc_chunks[doc_id].append(c)
+                
+            for doc_id in all_doc_chunks:
+                all_doc_chunks[doc_id].sort(key=lambda x: x["start_idx"])
 
-        candidate_texts = [c["content"] for c in candidates]
+        candidates = []
+        for h in hits:
+            doc_id = h.entity.get("doc_id")
+            start_idx = h.entity.get("start_idx")
+            end_idx = h.entity.get("end_idx")
+            content = h.entity.get("content")
+
+            c_list = all_doc_chunks.get(doc_id, [])
+            
+            # Tìm vị trí chunk hiện tại trong danh sách đã sắp xếp
+            curr_idx = -1
+            for idx, c in enumerate(c_list):
+                if c["start_idx"] == start_idx and c["end_idx"] == end_idx:
+                    curr_idx = idx
+                    break
+                    
+            big_content = content
+            big_start = start_idx
+            big_end = end_idx
+            
+            if curr_idx != -1:
+                parts = []
+                if curr_idx > 0:
+                    prev_c = c_list[curr_idx - 1]
+                    parts.append(prev_c["content"])
+                    big_start = min(big_start, prev_c["start_idx"])
+                
+                parts.append(content)
+                
+                if curr_idx < len(c_list) - 1:
+                    next_c = c_list[curr_idx + 1]
+                    parts.append(next_c["content"])
+                    big_end = max(big_end, next_c["end_idx"])
+                    
+                big_content = "\n".join(parts)
+                
+            candidates.append({
+                "doc_id": doc_id,
+                "content": big_content,
+                "start_idx": big_start,
+                "end_idx": big_end
+            })
+
+        # Loại bỏ các Big Chunks trùng lặp
+        unique_candidates = []
+        seen = set()
+        for cand in candidates:
+            k = f"{cand['doc_id']}_{cand['start_idx']}_{cand['end_idx']}"
+            if k not in seen:
+                seen.add(k)
+                unique_candidates.append(cand)
+
+        # Bước 5: Reranking (BGE-Reranker)
+        candidate_texts = [c["content"] for c in unique_candidates]
         scores = await asyncio.to_thread(local_rerank, request.contentQuery, candidate_texts)
         for i, s in enumerate(scores):
-            candidates[i]["rerank_score"] = float(s)
+            unique_candidates[i]["rerank_score"] = float(s)
 
-        sorted_candidates = sorted(candidates, key=lambda x: x["rerank_score"], reverse=True)
+        sorted_candidates = sorted(unique_candidates, key=lambda x: x["rerank_score"], reverse=True)
 
         print(f"\n[RERANK] Kết quả sau reranking (top {len(sorted_candidates)}):")
         for i, c in enumerate(sorted_candidates):
@@ -394,14 +465,20 @@ async def generate_ai_response(
                   f"content='{str(chunk['content'])[:100]}...'")
         print(f"{'='*60}\n")
 
-        # Bước 5: Chuẩn bị context (1-based, khớp với system prompt [1],[2],[3])
+        # Bước 6: Chuẩn bị context (1-based, khớp với system prompt [1],[2],[3])
         context_str = ""
         for i, chunk in enumerate(top_chunks):
-            context_str += f" Tài liệu [{i + 1}]: {chunk['content']}\n\n"
+            text_limited = chunk['content'][:2500] # Giới hạn 2500 ký tự mỗi chunk để tránh tràn context
+            context_str += f" Tài liệu [{i + 1}]: {text_limited}\n\n"
 
-        # Bước 6: Gọi Gemma qua HF Router (OpenAI-compatible)
+        print(f"[LLM] Đang gọi Hugging Face API với context dài {len(context_str)} ký tự...")
+        # Bước 7: Gọi Gemma qua HF Router (OpenAI-compatible)
         user_msg = build_user_message(context_str, request.contentQuery)
-        raw_answer = await asyncio.to_thread(hf_generate, SYSTEM_PROMPT, user_msg)
+        try:
+            raw_answer = await asyncio.to_thread(hf_generate, SYSTEM_PROMPT, user_msg)
+        except Exception as api_err:
+            print(f"[LLM] LỖI GỌI HUGGINGFACE API: {api_err}")
+            raise api_err
 
         # Bước 7: Post-process — đánh số citation tăng dần, KHÔNG lặp
         final_answer, final_citations = renumber_citations(raw_answer, top_chunks)

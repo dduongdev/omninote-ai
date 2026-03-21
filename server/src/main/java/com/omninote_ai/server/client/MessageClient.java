@@ -10,7 +10,7 @@ import com.omninote_ai.server.dto.MessageResponse;
 @FeignClient(
     name = "ai-service", 
     path = "/api/v1/ai",
-    fallback = MessageClientFallback.class
+    fallbackFactory = MessageClientFallbackFactory.class
 )
 public interface MessageClient {
 

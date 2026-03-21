@@ -24,7 +24,8 @@ def get_or_create_collection(collection_name: str) -> Collection:
             FieldSchema(name="end_idx", dtype=DataType.INT64),
             FieldSchema(name="metadata", dtype=DataType.JSON),
             FieldSchema(name="is_deleted", dtype=DataType.BOOL, default_value=False),
-            FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=768)
+            FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=1024),
+            FieldSchema(name="sparse_vector", dtype=DataType.SPARSE_FLOAT_VECTOR)
         ]
         schema = CollectionSchema(fields, description="Documents chunk collection")
         collection = Collection(collection_name, schema)
@@ -35,6 +36,14 @@ def get_or_create_collection(collection_name: str) -> Collection:
             "params": {"M": 8, "efConstruction": 64}
         }
         collection.create_index(field_name="vector", index_params=index_params)
+        
+        sparse_index_params = {
+            "metric_type": "IP", 
+            "index_type": "SPARSE_INVERTED_INDEX",
+            "params": {"drop_ratio_build": 0.2}
+        }
+        collection.create_index(field_name="sparse_vector", index_params=sparse_index_params)
+        
         logger.info(f"Created Milvus collection and index: {collection_name}")
         return collection
     else:
@@ -62,6 +71,7 @@ def insert_chunks(collection: Collection, partition_name: str, chunks: List[Chun
     metadatas = [c.metadata for c in chunks]
     is_deleteds = [False for _ in chunks]
     vectors = [c.vector for c in chunks]
+    sparse_vectors = [c.sparse_vector for c in chunks]
 
     entities = [
         doc_ids,
@@ -70,7 +80,8 @@ def insert_chunks(collection: Collection, partition_name: str, chunks: List[Chun
         end_idxs,
         metadatas,
         is_deleteds,
-        vectors
+        vectors,
+        sparse_vectors
     ]
     
     collection.insert(entities, partition_name=partition_name)

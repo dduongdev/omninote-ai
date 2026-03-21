@@ -53,6 +53,7 @@ public class Message {
     private List<Document> selectedDocuments = new ArrayList<>();
 
     @OneToMany(mappedBy = "message", fetch = FetchType.LAZY, cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true)
+    @jakarta.persistence.OrderBy("id ASC")
     @Builder.Default
     private List<MessageCitation> citations = new ArrayList<>();
 

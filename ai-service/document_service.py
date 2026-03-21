@@ -1,11 +1,12 @@
 import json
 import logging
 import time
+import torch
 from minio_client import get_object, upload_text, check_exists, delete_object
 from extractor import ExtractorFactory
 from preprocessor import PhobertPreprocessingChain
 from chunking import ContentChunker
-from sentence_transformers import SentenceTransformer
+from FlagEmbedding import BGEM3FlagModel
 from vector_store import connect_milvus, get_or_create_collection, ensure_partition, document_exists, insert_chunks, delete_document_chunks, drop_partition_if_exists
 from database import SessionLocal
 from models import OutboxEvent
@@ -16,7 +17,23 @@ logger = logging.getLogger(__name__)
 connect_milvus()
 collection = get_or_create_collection(COLLECTION_NAME)
 
-embedder = SentenceTransformer('keepitreal/vietnamese-sbert')
+def get_embedder():
+    try:
+        from chat_service import AI_MODELS
+        if "embedder" in AI_MODELS and AI_MODELS["embedder"] is not None:
+            return AI_MODELS["embedder"]
+    except ImportError:
+        pass
+    
+    # Fallback if running document_service standalone
+    global _local_embedder
+    if '_local_embedder' not in globals():
+        from FlagEmbedding import BGEM3FlagModel
+        logger.info("Loading local explicit BGEM3FlagModel...")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        use_fp16 = torch.cuda.is_available()
+        _local_embedder = BGEM3FlagModel('BAAI/bge-m3', use_fp16=use_fp16, device=device)
+    return _local_embedder
 
 class DocumentProcessingService:
     def process_document(self, conversation_id: int, doc_id: str, object_name: str, max_retries: int = 3):
@@ -52,7 +69,7 @@ class DocumentProcessingService:
                 else:
                     logger.info(f"Document {doc_id} not found in Milvus. Proceeding with embedding...")
 
-                    chunker = ContentChunker(chunk_size=500, overlap=50)
+                    chunker = ContentChunker(chunk_size=250, overlap=20)
                     metadata = {"source_name": object_name, "category": "document"}
                     chunks = chunker.chunk(text, str(doc_id), metadata)
                     
@@ -62,12 +79,18 @@ class DocumentProcessingService:
 
                         preprocessed_texts = [preprocessor.process(c.content) for c in chunks]
                         
-                        # 5. Embedding
-                        logger.info(f"Embedding {len(preprocessed_texts)} chunks locally...")
-                        embeddings = embedder.encode(preprocessed_texts).tolist()
+                        # 5. Embedding (Hybrid: Dense + Sparse)
+                        logger.info(f"Embedding {len(preprocessed_texts)} chunks locally (Hybrid)...")
+
+                        current_embedder = get_embedder()
+                        outputs = current_embedder.encode(preprocessed_texts, return_dense=True, return_sparse=True, return_colbert_vecs=False)
+                        dense_embeddings = outputs['dense_vecs'].tolist()
+                        lexical_weights = outputs['lexical_weights']
 
                         for i, chunk in enumerate(chunks):
-                            chunk.vector = embeddings[i]
+                            chunk.vector = dense_embeddings[i]
+                            # PyMilvus expects dict[int, float] cho SPARSE_FLOAT_VECTOR (int keyword id)
+                            chunk.sparse_vector = {int(k): float(v) for k, v in lexical_weights[i].items()}
 
                         insert_chunks(collection, partition_name, chunks)
 

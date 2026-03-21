@@ -6,7 +6,10 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    TOKENIZERS_PARALLELISM=false
+    TOKENIZERS_PARALLELISM=false \
+    OMP_NUM_THREADS=4 \
+    MKL_NUM_THREADS=4 \
+    OPENBLAS_NUM_THREADS=4
 
 # ===== Layer 1: OS deps (ít thay đổi → cache lâu) =====
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -38,4 +41,4 @@ COPY . .
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "python consumer.py & uvicorn chat_service:app --host 0.0.0.0 --port 8080 --no-access-log"]
+CMD ["sh", "./startup.sh"]

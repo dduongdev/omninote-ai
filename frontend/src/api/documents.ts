@@ -7,7 +7,7 @@ export const uploadDocuments = async (
 ): Promise<DocumentUploadResponse> => {
   const formData = new FormData()
   files.forEach((f) => formData.append('files', f))
-  const res = await api.post(`/api/v1/conversations/${conversationId}/documents/upload`, formData)
+  const res = await api.post(`/api/v1/conversations/${conversationId}/documents/upload`, formData, { timeout: 300000 })
   return res.data
 }
 

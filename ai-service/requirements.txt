@@ -1,8 +1,10 @@
 # Vector Database & AI
 pymilvus==2.4.4
-transformers==4.41.2
+transformers>=4.38.0,<4.43.0
 huggingface_hub>=0.28.0
-sentence-transformers==3.0.1
+sentence-transformers>=3.0.0
+FlagEmbedding>=1.2.10
+peft<=0.11.1
 
 # Orchestration & Framework
 langchain==0.2.6
