@@ -319,7 +319,7 @@ async def generate_ai_response(
 
         # Bước 3: Truy vấn Milvus (Top 10 Small Chunks bằng Hybrid Search)
         collection = Collection(COLLECTION_NAME)
-        collection.load() # Yêu cầu load trước khi hybrid search
+        await asyncio.to_thread(collection.load) # Yêu cầu load trước khi hybrid search
         
         enabled_docs_str = [str(d) for d in request.documentIds]
         filter_expr = build_filter_expr(enabled_docs_str)
@@ -341,7 +341,8 @@ async def generate_ai_response(
             expr=filter_expr
         )
 
-        search_results = collection.hybrid_search(
+        search_results = await asyncio.to_thread(
+            collection.hybrid_search,
             reqs=[dense_req, sparse_req],
             rerank=RRFRanker(k=60),
             limit=10,
