@@ -21,6 +21,11 @@ export const createConversation = async (formData: FormData): Promise<Conversati
   return res.data
 }
 
+export const updateConversationName = async (id: number, title: string): Promise<ConversationSummary> => {
+  const res = await api.post(`/api/v1/conversations/${id}/name`, { title })
+  return res.data
+}
+
 export const deleteConversation = async (id: number): Promise<ConversationDeleteResponse> => {
   const res = await api.delete(`/api/v1/conversations/${id}`)
   return res.data

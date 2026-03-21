@@ -249,6 +249,32 @@ public class ConversationServiceImpl implements ConversationService {
                 .build();
     }
 
+    @Override
+    @Transactional
+    public ConversationSummary updateConversationTitle(Long conversationId, String newTitle) {
+        Long currentUserId = jwtUtil.getCurrentUserId();
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new EntityNotFoundException("Conversation not found"));
+
+        if (!conversation.getUser().getId().equals(currentUserId)) {
+            throw new AccessDeniedException("User does not own this conversation");
+        }
+
+        conversation.setTitle(newTitle);
+        conversation = conversationRepository.save(conversation);
+
+        return ConversationSummary.builder()
+                .id(conversation.getId())
+                .title(conversation.getTitle())
+                .status(conversation.getStatus().name())
+                .documentCount(conversation.getDocuments().size())
+                .messageCount((int) messageRepository.countByConversationId(conversation.getId()))
+                .createdAt(conversation.getCreatedAt())
+                .updatedAt(conversation.getUpdatedAt())
+                .build();
+    }
+
     private void cleanupFailedDocument(Document document) {
         try {
             if (document.getObjectName() != null) {

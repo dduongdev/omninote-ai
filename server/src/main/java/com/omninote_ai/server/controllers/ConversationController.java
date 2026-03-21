@@ -16,6 +16,7 @@ import com.omninote_ai.server.dto.ConversationCreateResponse;
 import com.omninote_ai.server.dto.ConversationDeleteResponse;
 import com.omninote_ai.server.dto.ConversationHistoryResponse;
 import com.omninote_ai.server.dto.ConversationSummary;
+import com.omninote_ai.server.dto.ConversationUpdateNameRequest;
 import com.omninote_ai.server.dto.DocumentContentResponse;
 import com.omninote_ai.server.dto.DocumentDeleteRequest;
 import com.omninote_ai.server.dto.DocumentSummary;
@@ -56,6 +57,14 @@ public class ConversationController {
     @PostMapping("/api/v1/conversations/create")
     public ResponseEntity<?> createConversation(@Valid ConversationCreateRequest request) {
         ConversationCreateResponse response = conversationService.create(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/api/v1/conversations/{id}/name")
+    public ResponseEntity<ConversationSummary> updateConversationTitle(
+            @PathVariable("id") Long id,
+            @Valid @org.springframework.web.bind.annotation.RequestBody ConversationUpdateNameRequest request) {
+        ConversationSummary response = conversationService.updateConversationTitle(id, request.getTitle());
         return ResponseEntity.ok(response);
     }
 

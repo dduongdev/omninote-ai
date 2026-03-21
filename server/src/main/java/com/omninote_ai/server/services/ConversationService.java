@@ -18,4 +18,5 @@ public interface ConversationService {
     ConversationDeleteResponse deleteConversation(Long conversationId);
     List<ConversationSummary> getConversations();
     ConversationHistoryResponse getConversationHistory(Long conversationId);
+    ConversationSummary updateConversationTitle(Long conversationId, String newTitle);
 }

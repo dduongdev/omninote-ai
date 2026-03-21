@@ -11,9 +11,10 @@ interface Props {
   documents: DocumentSummary[]
   selectedDocIds: number[]
   onToggleDoc: (id: number) => void
+  onToggleAllDocs: (ids: number[], forceSelect: boolean) => void
 }
 
-export function DocumentPanel({ conversationId, documents, selectedDocIds, onToggleDoc }: Props) {
+export function DocumentPanel({ conversationId, documents, selectedDocIds, onToggleDoc, onToggleAllDocs }: Props) {
   const [showUpload, setShowUpload] = useState(false)
   const qc = useQueryClient()
 
@@ -23,6 +24,11 @@ export function DocumentPanel({ conversationId, documents, selectedDocIds, onTog
   })
 
   const readyDocs = documents.filter((d) => d.status === 'READY')
+  const allReadySelected = readyDocs.length > 0 && readyDocs.every(d => selectedDocIds.includes(d.id))
+  
+  const handleToggleAll = () => {
+    onToggleAllDocs(readyDocs.map(d => d.id), !allReadySelected)
+  }
 
   return (
     <>
@@ -31,15 +37,26 @@ export function DocumentPanel({ conversationId, documents, selectedDocIds, onTog
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
             Tài liệu ({documents.length}/5)
           </span>
-          {documents.length < 5 && (
-            <button
-              onClick={() => setShowUpload(true)}
-              className="p-1 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-              title="Thêm tài liệu"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          )}
+          <div className="flex gap-1 items-center">
+            {readyDocs.length > 0 && (
+               <button
+                 onClick={handleToggleAll}
+                 className={`p-1 rounded-lg hover:bg-white/10 transition-colors ${allReadySelected ? 'text-brand-light' : 'text-gray-400 hover:text-white'}`}
+                 title={allReadySelected ? "Bỏ chọn tất cả" : "Chọn tất cả"}
+               >
+                 {allReadySelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+               </button>
+            )}
+            {documents.length < 5 && (
+              <button
+                onClick={() => setShowUpload(true)}
+                className="p-1 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                title="Thêm tài liệu"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
