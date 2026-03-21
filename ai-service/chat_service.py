@@ -451,15 +451,42 @@ async def generate_ai_response(
 
         sorted_candidates = sorted(unique_candidates, key=lambda x: x["rerank_score"], reverse=True)
 
+        # Giai đoạn 1: Context Optimizer Agent - Kiểm tra Ngưỡng An toàn (Pivot Check)
+        K_min = 3
+        K_max = 7
+        alpha = 0.25
+        
+        if not sorted_candidates:
+            top_chunks = []
+        else:
+            score_max = sorted_candidates[0]["rerank_score"]
+            if score_max < 0.5:
+                # Điểm cao nhất thấp hơn 0.5 -> Mặc định lấy 3 chunk đầu tiên
+                K = K_min
+            else:
+                # Giai đoạn 2: Tính toán Số lượng Động (Dynamic K Calculation)
+                tau = score_max * (1 - alpha)
+                K_target = sum(1 for c in sorted_candidates if c["rerank_score"] >= tau)
+                
+                # Áp dụng ràng buộc biên (Clamp)
+                if K_target < K_min:
+                    K = K_min
+                elif K_target > K_max:
+                    K = K_max
+                else:
+                    K = K_target
+                    
+            # Giai đoạn 3: Output danh sách K chunk tốt nhất
+            top_chunks = sorted_candidates[:K]
+
         print(f"\n[RERANK] Kết quả sau reranking (top {len(sorted_candidates)}):")
         for i, c in enumerate(sorted_candidates):
-            marker = "✓ TOP" if i < 3 else "   "
+            marker = "✓ TOP" if i < len(top_chunks) else "   "
             print(f"  {marker}[{i}] doc_id={c['doc_id']} | "
                   f"rerank_score={c['rerank_score']:.4f} | "
                   f"idx=[{c['start_idx']},{c['end_idx']}] | "
                   f"content='{str(c['content'])[:80]}...'")
 
-        top_chunks = sorted_candidates[:3]
         print(f"\n[CONTEXT] Sử dụng {len(top_chunks)} chunks cho LLM (nhãn 1-based):")
         for i, chunk in enumerate(top_chunks):
             print(f"  [{i + 1}] doc_id={chunk['doc_id']} | score={chunk['rerank_score']:.4f} | "
