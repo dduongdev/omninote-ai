@@ -6,6 +6,41 @@ import { MessageItem } from './MessageItem'
 import { Spinner } from '../ui/Spinner'
 import type { MessageResponse } from '../../types'
 
+const LOADING_TEXTS = [
+  'Đang suy nghĩ...',
+  'Đang phân tích tài liệu...',
+  'Đọc lối văn...',
+  'Đang tổng hợp thông tin...',
+  'Đang tìm kiếm ngữ cảnh phù hợp...',
+  'Đang trình bày kết quả...'
+]
+
+function TypingIndicator() {
+  const [textIndex, setTextIndex] = useState(0)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTextIndex((prev) => (prev + 1) % LOADING_TEXTS.length)
+    }, 3500)
+    return () => clearInterval(interval)
+  }, [])
+
+  return (
+    <div className="flex items-start gap-3">
+      <div className="w-8 h-8 bg-surface-overlay rounded-full flex items-center justify-center border border-white/10 shrink-0">
+        <div className="flex gap-1">
+          <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+          <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+          <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+        </div>
+      </div>
+      <div className="bg-surface-overlay border border-white/5 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-gray-400 transition-all duration-300">
+        {LOADING_TEXTS[textIndex]}
+      </div>
+    </div>
+  )
+}
+
 interface Props {
   conversationId: number
   messages: MessageResponse[]
@@ -77,20 +112,7 @@ export function ChatPanel({ conversationId, messages, selectedDocIds }: Props) {
         ))}
 
         {/* Typing indicator */}
-        {mutation.isPending && (
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-surface-overlay rounded-full flex items-center justify-center border border-white/10">
-              <div className="flex gap-1">
-                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
-            </div>
-            <div className="bg-surface-overlay border border-white/5 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-gray-400">
-              Đang phân tích tài liệu...
-            </div>
-          </div>
-        )}
+        {mutation.isPending && <TypingIndicator />}
         <div ref={bottomRef} />
       </div>
 
