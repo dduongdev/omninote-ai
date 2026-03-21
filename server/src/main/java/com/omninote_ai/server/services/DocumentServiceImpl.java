@@ -19,6 +19,7 @@ import com.omninote_ai.server.exception.UploadFileException;
 import com.omninote_ai.server.mapper.DocumentMapper;
 import com.omninote_ai.server.repositories.ConversationRepository;
 import com.omninote_ai.server.repositories.DocumentRepository;
+import com.omninote_ai.server.repositories.MessageRepository;
 import com.omninote_ai.server.utility.JwtUtil;
 
 import jakarta.persistence.EntityNotFoundException;
@@ -33,6 +34,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final JwtUtil jwtUtil;
     private final ConversationRepository conversationRepository;
     private final DocumentRepository documentRepository;
+    private final MessageRepository messageRepository;
     private final OutboxEventService outboxEventService;
     private final MinioService minioService;
     private final DocumentSyncService documentSyncService;
@@ -171,6 +173,11 @@ public class DocumentServiceImpl implements DocumentService {
             if (document.getExtractedObjectName() != null) {
                 minioService.deleteFile(document.getExtractedObjectName());
             }
+            
+            // Delete constraints from messages table prior to deleting the actual document
+            messageRepository.deleteCitationsByDocumentId(docId);
+            messageRepository.deleteMessageDocumentsByDocumentId(docId);
+            
             documentRepository.delete(document);
 
             if (isConversationDeleting) {
@@ -246,6 +253,11 @@ public class DocumentServiceImpl implements DocumentService {
                 log.error("Failed to delete original MinIO file for doc {} during conversation delete",
                         docId, e);
             }
+            
+            // Cleanup message citations/references linking to document
+            messageRepository.deleteCitationsByDocumentId(docId);
+            messageRepository.deleteMessageDocumentsByDocumentId(docId);
+            
             documentRepository.delete(document);
             tryFinalizeConversationDelete(conversation);
             log.info("Document {} ingest failed during conversation delete. Cleaned up.", docId);

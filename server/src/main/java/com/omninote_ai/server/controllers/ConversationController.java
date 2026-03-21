@@ -105,7 +105,7 @@ public class ConversationController {
 
     @PostMapping("/api/v1/conversations/{conversationId}/documents/delete")
     public ResponseEntity<?> deleteDocument(
-            @PathVariable("conversationId") Long conversationId, DocumentDeleteRequest request) {
+            @PathVariable("conversationId") Long conversationId, @org.springframework.web.bind.annotation.RequestBody DocumentDeleteRequest request) {
         DocumentSummary response = documentService.deleteDocument(conversationId, request);
         return ResponseEntity.ok(response);
     }

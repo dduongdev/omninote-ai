@@ -25,6 +25,14 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     void deleteMessageDocumentsByConversationId(@Param("convId") Long conversationId);
 
     @Modifying
+    @Query(value = "DELETE FROM message_citations WHERE document_id = :docId", nativeQuery = true)
+    void deleteCitationsByDocumentId(@Param("docId") Long documentId);
+
+    @Modifying
+    @Query(value = "DELETE FROM message_documents WHERE document_id = :docId", nativeQuery = true)
+    void deleteMessageDocumentsByDocumentId(@Param("docId") Long documentId);
+
+    @Modifying
     @Query("DELETE FROM Message m WHERE m.conversation.id = :convId")
     void deleteAllByConversationId(@Param("convId") Long conversationId);
 }
