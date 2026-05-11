@@ -43,7 +43,7 @@ class MessageResponse(BaseModel):
 AI_MODELS: Dict[str, Any] = {}
 IS_READY = False   # True khi service đã sẵn sàng
 
-# --- 3. HELPER: Embedding & Reranking LOCAL (cùng model với document_service) ---
+# --- 3. HELPER: Embsedding & Reranking LOCAL (cùng model với document_service) ---
 
 GEMMA_MODEL = "aisingapore/Gemma-SEA-LION-v3-9B-IT:featherless-ai"
 HF_CHAT_URL = "https://router.huggingface.co/v1/chat/completions"
@@ -368,81 +368,91 @@ async def generate_ai_response(
                   f"idx=[{h.entity.get('start_idx')},{h.entity.get('end_idx')}] | "
                   f"content='{content_preview}...'") 
 
-        # Bước 4: Context Expansion (Mở rộng ngữ cảnh)
-        # Truy vấn lấy tất cả các chunks của các doc_id trong hits để tìm chunk trước + sau
-        hit_doc_ids = list(set([h.entity.get("doc_id") for h in hits]))
-        doc_ids_list = ",".join([f"'{d}'" for d in hit_doc_ids])
+        # # Bước 4: Context Expansion (Mở rộng ngữ cảnh)
+        # # Truy vấn lấy tất cả các chunks của các doc_id trong hits để tìm chunk trước + sau
+        # hit_doc_ids = list(set([h.entity.get("doc_id") for h in hits]))
+        # doc_ids_list = ",".join([f"'{d}'" for d in hit_doc_ids])
         
-        all_doc_chunks = {}
-        if hit_doc_ids:
-            # Query tất cả chunks của các docs này trong Milvus
-            all_chunks_query = collection.query(
-                expr=f"doc_id in [{doc_ids_list}]",
-                output_fields=["doc_id", "content", "start_idx", "end_idx"],
-                partition_names=[partition_name],
-                limit=10000
-            )
-            # Gom nhóm theo doc_id và sắp xếp theo start_idx
-            for c in all_chunks_query:
-                doc_id = c["doc_id"]
-                if doc_id not in all_doc_chunks:
-                    all_doc_chunks[doc_id] = []
-                all_doc_chunks[doc_id].append(c)
+        # all_doc_chunks = {}
+        # if hit_doc_ids:
+        #     # Query tất cả chunks của các docs này trong Milvus
+        #     all_chunks_query = collection.query(
+        #         expr=f"doc_id in [{doc_ids_list}]",
+        #         output_fields=["doc_id", "content", "start_idx", "end_idx"],
+        #         partition_names=[partition_name],
+        #         limit=10000
+        #     )
+        #     # Gom nhóm theo doc_id và sắp xếp theo start_idx
+        #     for c in all_chunks_query:
+        #         doc_id = c["doc_id"]
+        #         if doc_id not in all_doc_chunks:
+        #             all_doc_chunks[doc_id] = []
+        #         all_doc_chunks[doc_id].append(c)
                 
-            for doc_id in all_doc_chunks:
-                all_doc_chunks[doc_id].sort(key=lambda x: x["start_idx"])
+        #     for doc_id in all_doc_chunks:
+        #         all_doc_chunks[doc_id].sort(key=lambda x: x["start_idx"])
 
-        candidates = []
-        for h in hits:
-            doc_id = h.entity.get("doc_id")
-            start_idx = h.entity.get("start_idx")
-            end_idx = h.entity.get("end_idx")
-            content = h.entity.get("content")
+        # candidates = []
+        # for h in hits:
+        #     doc_id = h.entity.get("doc_id")
+        #     start_idx = h.entity.get("start_idx")
+        #     end_idx = h.entity.get("end_idx")
+        #     content = h.entity.get("content")
 
-            c_list = all_doc_chunks.get(doc_id, [])
+        #     c_list = all_doc_chunks.get(doc_id, [])
             
-            # Tìm vị trí chunk hiện tại trong danh sách đã sắp xếp
-            curr_idx = -1
-            for idx, c in enumerate(c_list):
-                if c["start_idx"] == start_idx and c["end_idx"] == end_idx:
-                    curr_idx = idx
-                    break
+        #     # Tìm vị trí chunk hiện tại trong danh sách đã sắp xếp
+        #     curr_idx = -1
+        #     for idx, c in enumerate(c_list):
+        #         if c["start_idx"] == start_idx and c["end_idx"] == end_idx:
+        #             curr_idx = idx
+        #             break
                     
-            big_content = content
-            big_start = start_idx
-            big_end = end_idx
+        #     big_content = content
+        #     big_start = start_idx
+        #     big_end = end_idx
             
-            if curr_idx != -1:
-                parts = []
-                if curr_idx > 0:
-                    prev_c = c_list[curr_idx - 1]
-                    parts.append(prev_c["content"])
-                    big_start = min(big_start, prev_c["start_idx"])
+        #     if curr_idx != -1:
+        #         parts = []
+        #         if curr_idx > 0:
+        #             prev_c = c_list[curr_idx - 1]
+        #             parts.append(prev_c["content"])
+        #             big_start = min(big_start, prev_c["start_idx"])
                 
-                parts.append(content)
+        #         parts.append(content)
                 
-                if curr_idx < len(c_list) - 1:
-                    next_c = c_list[curr_idx + 1]
-                    parts.append(next_c["content"])
-                    big_end = max(big_end, next_c["end_idx"])
+        #         if curr_idx < len(c_list) - 1:
+        #             next_c = c_list[curr_idx + 1]
+        #             parts.append(next_c["content"])
+        #             big_end = max(big_end, next_c["end_idx"])
                     
-                big_content = "\n".join(parts)
+        #         big_content = "\n".join(parts)
                 
-            candidates.append({
-                "doc_id": doc_id,
-                "content": big_content,
-                "start_idx": big_start,
-                "end_idx": big_end
-            })
+        #     candidates.append({
+        #         "doc_id": doc_id,
+        #         "content": big_content,
+        #         "start_idx": big_start,
+        #         "end_idx": big_end
+        #     })
 
-        # Loại bỏ các Big Chunks trùng lặp
-        unique_candidates = []
-        seen = set()
-        for cand in candidates:
-            k = f"{cand['doc_id']}_{cand['start_idx']}_{cand['end_idx']}"
-            if k not in seen:
-                seen.add(k)
-                unique_candidates.append(cand)
+        # # Loại bỏ các Big Chunks trùng lặp
+        # unique_candidates = []
+        # seen = set()
+        # for cand in candidates:
+        #     k = f"{cand['doc_id']}_{cand['start_idx']}_{cand['end_idx']}"
+        #     if k not in seen:
+        #         seen.add(k)
+        #         unique_candidates.append(cand)
+
+        unique_candidates = [
+            {
+                "doc_id": h.entity.get("doc_id"),
+                "content": h.entity.get("content"),
+                "start_idx": h.entity.get("start_idx"),
+                "end_idx": h.entity.get("end_idx")
+            }
+            for h in hits
+        ]
 
         # Bước 5: Reranking (BGE-Reranker)
         candidate_texts = [c["content"] for c in unique_candidates]
@@ -461,7 +471,7 @@ async def generate_ai_response(
             top_chunks = []
         else:
             score_max = sorted_candidates[0]["rerank_score"]
-            if score_max < 0.5:
+            if score_max < 0.2:
                 # Điểm cao nhất thấp hơn 0.5 -> Mặc định lấy 3 chunk đầu tiên
                 K = K_min
             else:
